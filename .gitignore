@@ -1,0 +1,5 @@
+data/raw/
+dist/
+node_modules/
+
+# docs/index.html 은 GitHub Pages 가 서빙하는 파일이라 일부러 커밋한다

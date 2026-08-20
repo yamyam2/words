@@ -437,6 +437,139 @@ try {
   check('세로 스크롤이 생기지 않음', small.docH <= small.vh + 1, `문서 ${small.docH} / 화면 ${small.vh}`)
   await shot('11-short')
   await shot('10-seven')
+  console.log('')
+  console.log('[12] 출제한 문제를 푼 뒤 오늘의 문제로 넘어가기')
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+    screenOrientation: { angle: 0, type: 'portraitPrimary' },
+  })
+  await goto(PAGE_URL)
+  await evaluate(DRIVE)
+
+  // 여러 칸 수에서 넘어와 본다
+  const cross = await evaluate(`(async () => {
+    const wait = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const b = () => document.querySelector('#board').getBoundingClientRect()
+    const out = []
+    __fast()
+    for (const from of [4, 6, 7]) {
+      TW.startGame('free', from); await wait()
+      const before = Math.round(b().width)
+      document.querySelector('[data-go=home]').click(); await wait()
+      document.querySelector('[data-size="5"]').click()
+      document.querySelector('[data-go=daily]').click(); await wait()
+      const r = b()
+      out.push({ from, before, after: Math.round(r.width), left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth })
+    }
+    return out
+  })()`)
+  for (const c of cross) console.log('    ' + JSON.stringify(c))
+  check('어느 칸 수에서 넘어와도 화면 밖으로 안 나간다', cross.every((c) => c.right <= c.vw && c.left >= 0),
+    JSON.stringify(cross.map((c) => `${c.from}->5: ${c.left}~${c.right}`)))
+
+  // 오늘의 문제를 이미 끝낸 상태로 다시 들어가면? (결과 바가 보드 높이를 줄인다)
+  const finished = await evaluate(`(async () => {
+    const wait = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const b = () => document.querySelector('#board').getBoundingClientRect()
+    TW.startGame('daily', 5); await wait()
+    await __play([[...TW.state.answerJamo].join('')])
+    await new Promise(r => setTimeout(r, 1400))
+    document.querySelector('#sheetCard [data-close]').click()
+    document.querySelector('[data-go=home]').click(); await wait()
+    document.querySelector('[data-go=daily]').click(); await wait()
+    const r = b()
+    const kb = document.querySelector('.keyboard').getBoundingClientRect()
+    const bar = document.getElementById('resultbar').getBoundingClientRect()
+    return { boardBottom: Math.round(r.bottom), boardW: Math.round(r.width),
+             kbTop: Math.round(kb.top), barShown: !document.getElementById('resultbar').hidden,
+             barH: Math.round(bar.height), docH: document.documentElement.scrollHeight, vh: innerHeight }
+  })()`)
+  console.log('    끝낸 오늘의 문제 다시 열기: ' + JSON.stringify(finished))
+  check('끝낸 문제 다시 열어도 보드가 키보드를 안 침범', finished.boardBottom <= finished.kbTop,
+    `보드 끝 ${finished.boardBottom} / 키보드 시작 ${finished.kbTop}`)
+  check('끝낸 문제 다시 열어도 세로 스크롤 없음', finished.docH <= finished.vh + 1,
+    `문서 ${finished.docH} / 화면 ${finished.vh}`)
+
+  const flow = await evaluate(`(async () => {
+    const wait = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const snap = (label) => {
+      const b = document.querySelector('#board').getBoundingClientRect()
+      const w = document.querySelector('.board-wrap')
+      const cs = getComputedStyle(w)
+      return { label, boardLeft: Math.round(b.left), boardRight: Math.round(b.right), boardW: Math.round(b.width),
+        style: document.querySelector('#board').style.width,
+        wrapW: w.clientWidth, wrapH: w.clientHeight,
+        padTop: Math.round(parseFloat(cs.paddingTop)), padBottom: Math.round(parseFloat(cs.paddingBottom)),
+        docW: document.documentElement.scrollWidth, vw: innerWidth,
+        kbH: Math.round(document.querySelector('.keyboard').getBoundingClientRect().height),
+        barHidden: document.getElementById('resultbar').hidden }
+    }
+    const out = []
+    __fast()
+    // 1) 커스텀 문제를 풀어서 끝낸다
+    TW.startGame('custom', 5, '시민')
+    await wait(); out.push(snap('커스텀 시작'))
+    await __play([[...TW.state.answerJamo].join('')])
+    await new Promise(r => setTimeout(r, 1400))
+    out.push(snap('커스텀 승리'))
+    // 2) 홈으로
+    document.querySelector('#sheetCard [data-close]').click()
+    document.querySelector('[data-go=home]').click()
+    await wait(); out.push(snap('홈'))
+    // 3) 오늘의 문제 5칸
+    document.querySelector('[data-size="5"]').click()
+    document.querySelector('[data-go=daily]').click()
+    await wait(); out.push(snap('오늘의 문제 직후'))
+    // 4) 자모 다섯 개 입력
+    for (const j of ['ㅅ','ㅣ','ㅁ','ㅣ','ㄴ']) { TW.press(j); await wait() }
+    out.push(snap('다섯 칸 채운 뒤'))
+    return out
+  })()`)
+  for (const s of flow) console.log('    ' + JSON.stringify(s))
+  const after = flow.find((s) => s.label === '오늘의 문제 직후')
+  const filled = flow.find((s) => s.label === '다섯 칸 채운 뒤')
+  // 폭 계산이 어긋나도 보드가 화면 밖으로 밀려 한쪽에 치우쳐 보이면 안 된다
+  const forced = await evaluate(`(async () => {
+    const board = document.querySelector('#board')
+    board.style.width = '900px'
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const r = board.getBoundingClientRect()
+    return { w: Math.round(r.width), left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth,
+             docW: document.documentElement.scrollWidth }
+  })()`)
+  check('폭이 터무니없이 커도 화면 밖으로 안 나간다', forced.right <= forced.vw && forced.left >= 0,
+    `${forced.left}~${forced.right} / 화면 ${forced.vw}`)
+  eq('그래도 가로 스크롤은 생기지 않는다', forced.docW, forced.vw)
+
+  // 남은 공간이 바뀌면 스스로 다시 맞춰야 한다 (모바일 주소창 접힘 · 결과 바 등)
+  await evaluate(`document.querySelector('#board').style.width = ''`)
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 560, deviceScaleFactor: 2, mobile: true,
+    screenOrientation: { angle: 0, type: 'portraitPrimary' },
+  })
+  await sleep(400)
+  const shrunk = await evaluate(`(() => {
+    const r = document.querySelector('#board').getBoundingClientRect()
+    const kb = document.querySelector('.keyboard').getBoundingClientRect()
+    return { w: Math.round(r.width), bottom: Math.round(r.bottom), kbTop: Math.round(kb.top),
+             docH: document.documentElement.scrollHeight, vh: innerHeight }
+  })()`)
+  console.log('    화면이 낮아진 뒤: ' + JSON.stringify(shrunk))
+  check('화면이 낮아지면 보드가 스스로 줄어든다', shrunk.bottom <= shrunk.kbTop,
+    `보드 끝 ${shrunk.bottom} / 키보드 시작 ${shrunk.kbTop}`)
+  check('그 상태에서도 세로 스크롤 없음', shrunk.docH <= shrunk.vh + 1, `문서 ${shrunk.docH} / 화면 ${shrunk.vh}`)
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+    screenOrientation: { angle: 0, type: 'portraitPrimary' },
+  })
+  await sleep(300)
+
+  check('오늘의 문제 보드가 화면 안에 들어온다', after.boardRight <= after.vw, `오른쪽 끝 ${after.boardRight} / 화면 ${after.vw}`)
+  check('보드가 좌우 가운데', Math.abs(after.boardLeft - (after.vw - after.boardRight)) <= 2,
+    `왼쪽 여백 ${after.boardLeft} / 오른쪽 여백 ${after.vw - after.boardRight}`)
+  eq('입력 전후 보드 크기가 같다', after.boardW, filled.boardW)
+  await shot('14-daily-after-custom')
+
 } catch (err) {
   failed = true
   console.error('\n하네스 오류:', err.message)

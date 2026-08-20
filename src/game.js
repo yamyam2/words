@@ -233,21 +233,28 @@
   // 타일은 정사각형이라 보드 폭이 곧 보드 높이를 정한다. 남은 가로·세로 공간 중
   // 빠듯한 쪽에 맞춰 타일 한 변을 정하고, 그만큼만 보드에 준다.
   const TILE_MAX = 68
+  const TILE_MIN = 24
   const GAP = 6
   function fitBoard() {
-    if (!state) return
+    if (!state || el.game.hidden) return
     const wrap = el.board.parentElement
     const style = getComputedStyle(wrap)
     const availWidth = wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
     const availHeight = wrap.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
-    const tile = Math.min(
+    // 아직 레이아웃이 잡히기 전이면 건드리지 않는다. 여기서 음수 폭을 넣으면
+    // 브라우저가 그 값을 버리고 직전 판의 폭이 그대로 남아 보드가 어긋난다.
+    if (!(availWidth > 0 && availHeight > 0)) return
+    const tile = Math.max(TILE_MIN, Math.min(
       TILE_MAX,
       (availWidth - GAP * (state.size - 1)) / state.size,
       (availHeight - GAP * (MAX_TRIES - 1)) / MAX_TRIES,
-    )
+    ))
     el.board.style.width = Math.floor(tile * state.size + GAP * (state.size - 1)) + 'px'
   }
-  addEventListener('resize', fitBoard)
+  // 남은 공간이 바뀌면 언제든 다시 맞춘다 — 모바일 주소창이 접히거나, 결과 바가 뜨거나,
+  // 화면을 돌리거나, 화면 전환 직후 레이아웃이 늦게 잡히는 경우까지 한 번에 덮는다.
+  if (typeof ResizeObserver === 'function') new ResizeObserver(fitBoard).observe(el.board.parentElement)
+  else addEventListener('resize', fitBoard)
 
   function buildKeyboard() {
     el.keyboard.innerHTML = ''

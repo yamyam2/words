@@ -216,15 +216,17 @@ try {
 
   console.log('\n[7] 직접 출제 → 링크 → 그 링크로 접속')
   await evaluate(`document.querySelector('[data-close]').click(); document.querySelector('[data-go=compose]').click()`)
+  // 여기서는 잠금을 끈 일반 링크를 본다 (잠금 링크는 [7-0] 에서 따로 확인)
   const compose = await evaluate(`(() => {
     const input = document.getElementById('composeInput')
     input.value = '정치'; input.dispatchEvent(new Event('input', { bubbles: true }))
     const hint = document.getElementById('composeHint').textContent
+    document.getElementById('composeLock').checked = false
     document.getElementById('composeMake').click()
     return { hint, link: document.getElementById('composeLink').value }
   })()`)
   eq('출제 입력 안내', compose.hint, '5칸 · ㅈ ㅓ ㅇ ㅊ ㅣ')
-  check('링크 생성', /#w=[A-Za-z0-9_-]+$/.test(compose.link), compose.link.slice(-30))
+  check('일반 링크 생성', /#w=[A-Za-z0-9_-]+$/.test(compose.link), compose.link.slice(-30))
   await shot('08-compose')
 
   const badWord = await evaluate(`(() => {
@@ -249,6 +251,64 @@ try {
 
   // 아티팩트는 게임을 iframe 안에서 띄운다. 그때 location 은 일회용 내부 주소라
   // 그대로 링크로 내보내면 받는 사람에게 'page not found' 가 뜬다. 코드로 떨어져야 한다.
+  console.log('')
+  console.log('[7-0] 잠금 링크 — 그 문제 하나만 풀 수 있어야 한다')
+  await goto(PAGE_URL)
+  await evaluate(DRIVE)
+  const locked = await evaluate(`(() => {
+    document.querySelector('[data-go=compose]').click()
+    const input = document.getElementById('composeInput')
+    input.value = '시민'; input.dispatchEvent(new Event('input', { bubbles: true }))
+    const checked = document.getElementById('composeLock').checked
+    document.getElementById('composeMake').click()
+    return { checked, link: document.getElementById('composeLink').value, note: document.getElementById('composeNote').textContent }
+  })()`)
+  check('잠금이 기본값', locked.checked)
+  check('잠금 링크는 #p=', /#p=[A-Za-z0-9_-]+$/.test(locked.link), locked.link.slice(-24))
+  check('안내 문구가 잠금용', locked.note.includes('이 문제만'), locked.note)
+
+  const unlocked = await evaluate(`(() => {
+    const box = document.getElementById('composeLock')
+    box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true }))
+    return document.getElementById('composeLink').value
+  })()`)
+  check('체크를 끄면 #w= 로 바뀐다', /#w=[A-Za-z0-9_-]+$/.test(unlocked), unlocked.slice(-24))
+
+  await goto(locked.link)
+  await evaluate(DRIVE)
+  const lockedUi = await evaluate(`({
+    answer: TW.state.answer, locked: TW.state.locked,
+    backHidden: getComputedStyle(document.getElementById('btnBack')).visibility === 'hidden',
+    titleLines: Math.round(document.querySelector('.topbar .title span').getBoundingClientRect().height),
+    menuSheet: document.getElementById('btnMenu').dataset.sheet,
+    sheetOpen: !document.getElementById('sheet').hidden,
+  })`)
+  eq('잠금 링크로 그 단어가 열린다', [lockedUi.answer, lockedUi.locked], ['시민', true])
+  check('처음으로 버튼이 감춰진다', lockedUi.backHidden)
+  check('제목이 한 줄로 들어간다', lockedUi.titleLines < 34, `제목 높이 ${lockedUi.titleLines}px`)
+  eq('오른쪽 아이콘이 규칙으로', lockedUi.menuSheet, 'rules')
+  check('열려 있던 시트가 닫힌다', !lockedUi.sheetOpen)
+  await shot('12-locked')
+
+  await evaluate(`__play(['ㅅㅣㅁㅣㄴ'])`)
+  await sleep(1500)
+  const lockedResult = await evaluate(`(() => {
+    const card = document.getElementById('sheetCard')
+    return { open: !document.getElementById('sheet').hidden, text: card.textContent,
+             buttons: [...card.querySelectorAll('.btn')].map((b) => b.textContent.trim()),
+             textlink: (card.querySelector('.textlink') || {}).textContent }
+  })()`)
+  check('결과 시트에 정답 공개', lockedResult.text.includes('시민'))
+  eq('버튼은 결과 복사 하나뿐', lockedResult.buttons, ['결과 복사하기'])
+  check('다른 모드로 새는 버튼 없음',
+    !lockedResult.text.includes('새 문제') && !lockedResult.text.includes('무한 연습') && !lockedResult.text.includes('기록 보기'))
+  eq('전체 게임으로 가는 작은 링크', lockedResult.textlink, '나도 문제 내보기')
+  await shot('13-locked-result')
+
+  await evaluate(`document.querySelector('.textlink').click()`)
+  const escaped = await evaluate(`({ home: !document.getElementById('home').hidden, hash: location.hash })`)
+  check('그 링크로 전체 게임 시작 화면으로 간다', escaped.home && escaped.hash === '', JSON.stringify(escaped))
+
   console.log('')
   console.log('[7-1] iframe 안(아티팩트 상황)에서는 링크 대신 문제 코드')
   const framed = await evaluate(`(async () => {

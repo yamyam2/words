@@ -79,6 +79,7 @@ h1, h2, h3, p { margin: 0; }
 .topbar .title span { font-size: 17px; font-weight: 800; }
 .topbar .title small { display: block; font-size: 11px; color: var(--ink-dim); }
 .icon { font-size: 20px; padding: 8px; color: var(--ink-dim); border-radius: 8px; }
+.invisible { visibility: hidden; pointer-events: none; }
 
 .board-wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: min(5vh, 38px) 10px 10px; min-height: 0; }
 /* 보드 폭은 fitBoard() 가 실제 남은 가로·세로 공간을 재서 직접 넣는다.
@@ -186,6 +187,14 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink-dim); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   resize: none; height: 74px;
 }
+.check {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 16px;
+  font-size: 14px; line-height: 1.5; color: #d8d8dc; cursor: pointer;
+}
+.check input { width: 19px; height: 19px; margin: 1px 0 0; accent-color: var(--correct); flex: none; }
+.check .muted { font-size: 12px; }
+.textlink { color: var(--ink-dim); font-size: 14px; text-decoration: underline; text-underline-offset: 4px; padding: 6px; }
+
 .hint { font-size: 13px; margin-top: 10px; min-height: 20px; }
 .hint.ok { color: var(--correct); }
 .hint.bad { color: #ff8f8f; }

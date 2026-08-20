@@ -27,7 +27,8 @@
   const $ = (sel) => document.querySelector(sel)
   const el = { home: $('#home'), game: $('#game'), board: $('#board'), keyboard: $('#keyboard'),
     toast: $('#toast'), sheet: $('#sheet'), sheetCard: $('#sheetCard'), resultbar: $('#resultbar'),
-    title: $('#gameTitle'), sub: $('#gameSub'), sizePicker: $('#sizePicker') }
+    title: $('#gameTitle'), sub: $('#gameSub'), sizePicker: $('#sizePicker'),
+    back: $('#btnBack'), menu: $('#btnMenu') }
 
   // ── 저장소 (샌드박스 iframe 에서 localStorage 가 막힐 수 있어 메모리로 폴백) ──
   const mem = {}
@@ -103,17 +104,19 @@
     return location.origin + location.pathname + location.search
   }
 
-  // 링크든 코드든 붙여넣은 문자열에서 문제를 꺼낸다
+  // 링크든 코드든 붙여넣은 문자열에서 문제를 꺼낸다.
+  // #p= 는 잠금 링크(그 문제 하나만 풀 수 있음), #w= 와 맨코드는 일반.
   function readPuzzle(text) {
     const raw = String(text || '').trim()
-    const match = /[#&?]w=([A-Za-z0-9_-]+)/.exec(raw) || /^([A-Za-z0-9_-]+)$/.exec(raw)
+    const locked = /[#&?]p=([A-Za-z0-9_-]+)/.exec(raw)
+    const match = locked || /[#&?]w=([A-Za-z0-9_-]+)/.exec(raw) || /^([A-Za-z0-9_-]+)$/.exec(raw)
     if (!match) return null
     let word
     try { word = b64url.decode(match[1]) } catch (e) { return null }
     const jamo = H.decompose(word || '')
     if (!jamo) return null
     const size = Array.from(jamo).length
-    return SIZES.includes(size) ? { word, size } : null
+    return SIZES.includes(size) ? { word, size, locked: Boolean(locked) } : null
   }
 
   // ── 상태 ─────────────────────────────────────────────────────────────
@@ -123,10 +126,11 @@
 
   const isValid = (jamo) => W.validSet(jamo.length).has(H.encode(jamo))
 
-  function startGame(mode, size, word) {
+  // locked = 잠금 링크로 들어온 경우. 그 문제 하나만 풀 수 있고 나머지 화면은 감춘다.
+  function startGame(mode, size, word, locked) {
     const answer = word || (mode === 'daily' ? dailyAnswer(kstToday(), size) : freeAnswer(size))
     state = {
-      mode, size, answer,
+      mode, size, answer, locked: Boolean(locked),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
       date: kstToday(),
@@ -189,9 +193,15 @@
     paintSizePicker()
   }
   function showGame() {
+    closeSheet()          // 해시로 들어오면 열려 있던 시트가 그대로 남는다
     el.home.hidden = true
     el.game.hidden = false
     el.resultbar.hidden = true
+    // hidden 으로 감추면 그리드 칸이 무너져 제목이 눌린다. 자리는 남기고 안 보이게만 한다.
+    el.back.classList.toggle('invisible', state.locked)
+    el.menu.dataset.sheet = state.locked ? 'rules' : 'stats'
+    el.menu.textContent = state.locked ? '?' : '☰'
+    el.menu.setAttribute('aria-label', state.locked ? '규칙' : '기록')
     el.title.textContent = MODE_LABEL[state.mode]
     el.sub.textContent = state.mode === 'daily'
       ? `${state.date} · ${state.size}칸`
@@ -483,16 +493,27 @@
     result: () => {
       const won = state.status === 'won'
       const head = won ? `${state.guesses.length}번 만에 맞혔어요` : '아쉬워요'
-      const again = state.mode === 'daily'
-        ? `<button class="btn" data-go="free">무한 연습으로 계속하기</button>`
-        : `<button class="btn" data-go="again">새 문제 풀기</button>`
-      return `
+      const reveal = `
         <h2>${head}</h2>
         <div class="answer-reveal">
           <b>${esc(state.answer)}</b>
           <span>${jamoChips(state.answerJamo.join(''))}</span>
         </div>
-        <div class="share-grid">${shareGrid().split('\n').join('<br>')}</div>
+        <div class="share-grid">${shareGrid().split('\n').join('<br>')}</div>`
+      // 잠금 링크로 들어왔으면 이 문제 하나로 끝. 전체 게임으로 가는 길만 작게 남긴다.
+      if (state.locked) {
+        return `${reveal}
+        <div class="sheet-actions">
+          <button class="btn accent" data-act="share">결과 복사하기</button>
+        </div>
+        <p style="text-align:center;margin-top:18px">
+          <button class="textlink" data-go="home">나도 문제 내보기</button>
+        </p>`
+      }
+      const again = state.mode === 'daily'
+        ? `<button class="btn" data-go="free">무한 연습으로 계속하기</button>`
+        : `<button class="btn" data-go="again">새 문제 풀기</button>`
+      return `${reveal}
         <div class="sheet-actions">
           <button class="btn accent" data-act="share">결과 복사하기</button>
           ${again}
@@ -513,6 +534,12 @@
                autocomplete="off" autocapitalize="off" spellcheck="false">
         <div class="hint" id="composeHint"></div>
       </div>
+      ${linkable ? `
+      <label class="check">
+        <input type="checkbox" id="composeLock" checked>
+        <span>이 링크로는 <b>이 문제 하나만</b> 풀 수 있게<br>
+          <span class="muted">끄면 친구가 다른 모드도 자유롭게 쓸 수 있어요</span></span>
+      </label>` : ''}
       <div class="sheet-actions">
         <button class="btn primary" id="composeMake" data-act="make-link" disabled>${linkable ? '링크 만들기' : '문제 코드 만들기'}</button>
       </div>
@@ -583,10 +610,14 @@
     if (!composedWord) return
     const code = b64url.encode(composedWord)
     const base = shareUrl()
-    $('#composeLink').value = base ? base + '#w=' + code : code
-    $('#composeNote').textContent = base
-      ? '이 링크를 카톡으로 보내면 친구가 바로 풀 수 있어요.'
-      : '게임 주소와 이 코드를 함께 보내세요. 친구는 아래 “친구가 준 문제 풀기” 칸에 코드를 넣으면 됩니다.'
+    const lock = $('#composeLock')
+    const locked = Boolean(lock && lock.checked)
+    $('#composeLink').value = base ? `${base}#${locked ? 'p' : 'w'}=${code}` : code
+    $('#composeNote').textContent = !base
+      ? '게임 주소와 이 코드를 함께 보내세요. 친구는 아래 “친구가 준 문제 풀기” 칸에 코드를 넣으면 됩니다.'
+      : locked
+        ? '이 링크로 들어가면 이 문제만 나옵니다. 다른 모드는 보이지 않아요.'
+        : '이 링크를 카톡으로 보내면 친구가 바로 풀 수 있어요.'
     $('#composeCopy').textContent = base ? '링크 복사하기' : '문제 코드 복사하기'
     $('#composeOut').hidden = false
     $('#composeOut').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -629,6 +660,10 @@
   })
 
   document.addEventListener('input', (ev) => { if (ev.target.id === 'composeInput') onComposeInput() })
+  // 잠금 체크를 바꾸면 이미 만들어 둔 링크도 따라 바뀌어야 한다
+  document.addEventListener('change', (ev) => {
+    if (ev.target.id === 'composeLock' && composedWord && !$('#composeOut').hidden) makeLink()
+  })
   document.addEventListener('keydown', (ev) => {
     if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA') {
       if (ev.key === 'Enter' && ev.target.id === 'composeInput' && composedWord) makeLink()
@@ -649,10 +684,10 @@
   })
   // ── 시작 ─────────────────────────────────────────────────────────────
   function bootFromHash() {
-    if (!location.hash.includes('w=')) return false
+    if (!/[#&]([wp])=/.test(location.hash)) return false
     const puzzle = readPuzzle(location.hash)
     if (!puzzle) return false
-    startGame('custom', puzzle.size, puzzle.word)
+    startGame('custom', puzzle.size, puzzle.word, puzzle.locked)
     return true
   }
   paintSizePicker()

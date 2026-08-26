@@ -22,7 +22,10 @@
     z: 'ㅋ', x: 'ㅌ', c: 'ㅊ', v: 'ㅍ', b: 'ㅠ', n: 'ㅜ', m: 'ㅡ',
   }
   const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '⬜' }
-  const MODE_LABEL = { daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제' }
+  const MODE_LABEL = {
+    daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제',
+    versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동',
+  }
 
   const $ = (sel) => document.querySelector(sel)
   const el = { home: $('#home'), game: $('#game'), board: $('#board'), keyboard: $('#keyboard'),
@@ -122,6 +125,8 @@
   // ── 상태 ─────────────────────────────────────────────────────────────
   let state = null
   let busy = false
+  let judge = (guess) => H.score(guess, state.answerJamo)
+  let pending = []
   let pickedSize = store.get('tw.settings.v1', { size: 5 }).size
 
   const isValid = (jamo) => W.validSet(jamo.length).has(H.encode(jamo))
@@ -133,7 +138,7 @@
       mode, size, answer, locked: Boolean(locked),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
-      date: kstToday(),
+      date: kstToday(), room: globalThis.Room?.current?.code || null,
     }
     if (mode === 'daily') restoreDaily()
     showGame()
@@ -166,7 +171,7 @@
     return s
   }
   function recordResult() {
-    if (state.mode === 'custom') return          // 남이 낸 문제는 기록에 넣지 않는다
+    if (state.mode !== 'daily' && state.mode !== 'free') return
     const stats = loadStats()
     const s = stats[state.size]
     s.played++
@@ -189,12 +194,16 @@
     state = null
     if (location.hash) history.replaceState(null, '', location.pathname + location.search)
     el.game.hidden = true
+    const lobby = $('#lobby')
+    if (lobby) lobby.hidden = true
     el.home.hidden = false
     paintSizePicker()
   }
   function showGame() {
     closeSheet()          // 해시로 들어오면 열려 있던 시트가 그대로 남는다
     el.home.hidden = true
+    const lobby = $('#lobby')
+    if (lobby) lobby.hidden = true
     el.game.hidden = false
     el.resultbar.hidden = true
     // hidden 으로 감추면 그리드 칸이 무너져 제목이 눌린다. 자리는 남기고 안 보이게만 한다.
@@ -329,22 +338,32 @@
     if (last) { last.classList.remove('pop'); void last.offsetWidth; last.classList.add('pop') }
   }
 
-  function submit() {
+  async function submit() {
     const guess = state.current
     if (guess.length < state.size) return reject('자모를 다 채워주세요')
     if (!isValid(guess)) return reject('사전에 없는 단어예요')
+
+    // 비동기 채점기로 교체해도 같은 입력이 두 번 제출되지 않게 채점 전에 잠근다.
+    busy = true
+    const activeState = state
+    let marks
+    try { marks = await judge(guess.slice()) } catch (e) {
+      busy = false
+      toast('채점하지 못했어요. 다시 시도해 주세요')
+      return
+    }
+    if (state !== activeState) { busy = false; return }
 
     state.guesses.push(guess.slice())
     state.current = []
     const rowIndex = state.guesses.length - 1
     paint(rowIndex)
 
-    const marks = H.score(guess, state.answerJamo)
     const won = marks.every((m) => m === 'correct')
     if (won) state.status = 'won'
     else if (state.guesses.length >= MAX_TRIES) state.status = 'lost'
+    if (state.room) globalThis.Room?.localMark(rowIndex, marks)
 
-    busy = true
     const tiles = el.board.children[rowIndex].children
     marks.forEach((mark, i) => {
       setTimeout(() => {
@@ -356,9 +375,18 @@
       busy = false
       paintKeyboard()
       saveDaily()
-      if (state.status !== 'playing') { recordResult(); finish() }
+      if (state.status !== 'playing') {
+        recordResult()
+        if (state.room) globalThis.Room?.localDone(state.status, state.guesses.length)
+        finish()
+      }
+      const q = pending
+      pending = []
+      for (const fn of q) { try { fn() } catch (e) { /* 원격 이벤트 하나가 뒤 큐를 막지 않게 한다 */ } }
     }, marks.length * 180 + 420)
   }
+  function setJudge(next) { judge = typeof next === 'function' ? next : (guess) => H.score(guess, state.answerJamo) }
+  function applyRemote(fn) { if (busy) pending.push(fn); else fn() }
   function reject(message) {
     toast(message)
     const row = el.board.children[state.guesses.length]
@@ -366,6 +394,7 @@
   }
 
   function finish(restored) {
+    if (state.room) { el.resultbar.hidden = true; return }
     el.resultbar.hidden = false
     if (state.status === 'won' && !restored) {
       const tiles = el.board.children[state.guesses.length - 1].children
@@ -630,6 +659,22 @@
     $('#composeOut').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
+  // 다른 기능 파일이 화면 이동과 액션을 자기 키로 등록할 수 있는 작은 확장점.
+  const GOES = {
+    home: showHome,
+    again: () => startGame(state.mode === 'custom' ? 'free' : state.mode, resolveSize()),
+    daily: () => startGame('daily', resolveSize()),
+    free: () => startGame('free', resolveSize()),
+    compose: () => openSheet('compose'),
+  }
+  const ACTIONS = {
+    'make-link': makeLink,
+    join: joinPuzzle,
+    share: () => copyAndTell(shareText(), '결과를 복사했어요'),
+    'copy-link': () => copyAndTell($('#composeLink').value, shareUrl() ? '링크를 복사했어요' : '문제 코드를 복사했어요'),
+    'try-link': () => { closeSheet(); startGame('custom', Array.from(H.decompose(composedWord)).length, composedWord) },
+  }
+
   // ── 이벤트 ───────────────────────────────────────────────────────────
   document.addEventListener('click', (ev) => {
     const target = ev.target.closest('[data-key],[data-go],[data-sheet],[data-act],[data-close],[data-size]')
@@ -646,24 +691,16 @@
       return paintSizePicker()
     }
     if (target.dataset.go) {
-      const go = target.dataset.go
       closeSheet()
-      if (go === 'home') return showHome()
-      if (go === 'again') return startGame(state.mode === 'custom' ? 'free' : state.mode, resolveSize())
-      if (go === 'daily' || go === 'free') {
-        if (go === 'free' && state) return startGame('free', resolveSize())
-        return startGame(go, resolveSize())
-      }
-      if (go === 'compose') return openSheet('compose')
+      const fn = GOES[target.dataset.go]
+      if (fn) return fn(target, ev)
     }
     if (target.dataset.sheet) return openSheet(target.dataset.sheet)
 
-    const act = target.dataset.act
-    if (act === 'make-link') return makeLink()
-    if (act === 'join') return joinPuzzle()
-    if (act === 'share') return copyAndTell(shareText(), '결과를 복사했어요')
-    if (act === 'copy-link') return copyAndTell($('#composeLink').value, shareUrl() ? '링크를 복사했어요' : '문제 코드를 복사했어요')
-    if (act === 'try-link') { closeSheet(); return startGame('custom', Array.from(H.decompose(composedWord)).length, composedWord) }
+    if (target.dataset.act) {
+      const fn = ACTIONS[target.dataset.act]
+      if (fn) return fn(target, ev)
+    }
   })
 
   document.addEventListener('input', (ev) => { if (ev.target.id === 'composeInput') onComposeInput() })
@@ -691,7 +728,12 @@
   })
   // ── 시작 ─────────────────────────────────────────────────────────────
   function bootFromHash() {
-    if (!/[#&]([wp])=/.test(location.hash)) return false
+    const roomMatch = /[#&]r=([23456789ABCDEFGHJKMNPQRSTVWXYZ]{6})/i.exec(location.hash)
+    if (roomMatch) {
+      globalThis.TWRoomHash = roomMatch[1].toUpperCase()
+      return false
+    }
+    if (!/[#&]([wpr])=/.test(location.hash)) return false
     const puzzle = readPuzzle(location.hash)
     if (!puzzle) return false
     startGame('custom', puzzle.size, puzzle.word, puzzle.locked)
@@ -702,5 +744,28 @@
   window.addEventListener('hashchange', () => { if (!bootFromHash()) showHome() })
 
   // 브라우저 콘솔·자동 테스트용 훅
-  globalThis.TW = { press, submit, startGame, get state() { return state }, shareText, shareUrl }
+  globalThis.TW = {
+    press, submit, startGame,
+    get state() { return state },
+    get busy() { return busy },
+    shareText, shareUrl, freeAnswer, resolveSize,
+    SHEETS, GOES, ACTIONS, openSheet, closeSheet, toast, store, isValid, b64url,
+    MAX_TRIES, SIZES, setJudge, applyRemote,
+    repaint: () => { if (state) paint() },
+    restoreRoomGame: (guesses, status = 'playing') => {
+      if (!state || !state.room) return
+      state.guesses = (guesses || []).map((guess) => Array.from(guess).slice(0, state.size))
+      state.current = []
+      state.status = ['playing', 'won', 'lost'].includes(status) ? status : 'playing'
+      paint()
+    },
+    endRoomGame: () => {
+      if (!state || !state.room || state.status !== 'playing') return
+      state.status = 'lost'
+      state.current = []
+      paint()
+      el.resultbar.hidden = true
+    },
+    copyAndTell,
+  }
 })()

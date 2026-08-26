@@ -4,7 +4,8 @@
 친구들과 여러 판 돌려 볼 수 있게 만들었다. 비공식 개인 프로젝트.
 
 링크 하나만 보내면 바로 플레이되는 **자체 완결형 웹 페이지**다. 빌드 결과물 `dist/index.html` 한 파일에
-게임과 단어 데이터가 전부 들어 있고, 실행에 네트워크가 필요 없다.
+게임과 단어 데이터가 전부 들어 있다. 오늘의 문제·무한 연습·직접 출제는 네트워크 없이도 그대로 동작하고,
+Supabase Realtime 설정을 넣어 빌드한 배포본에서만 선택적으로 **같이 하기**가 나타난다.
 
 ## 규칙
 
@@ -33,6 +34,8 @@
     다 풀면 정답과 결과 복사만 뜬다. 맨 아래 `나도 문제 내보기` 글씨 링크 하나로만 전체 게임에 들어갈 수 있다.
   - **일반 링크 `#w=<코드>`** — 출제 화면에서 잠금 체크를 끄면 나온다. 친구가 그 문제를 푼 뒤 전체 게임을 그대로 쓸 수 있다.
   - 붙여넣기로 시작한 문제는 이미 전체 게임 안이라 잠기지 않는다.
+- **같이 하기** — 6자리 방 코드나 링크로 모여 방장이 시작하면 모두 같은 단어를 동시에 푼다. 상대 보드에는
+  글자 없이 초록·노랑·회색 결과만 보인다. 이 버튼은 빌드할 때 Supabase 설정을 넣은 온라인 배포본에만 나타난다.
 
 4·5·6·7칸을 고를 수 있고, 시도는 어느 칸이든 5번이다. 기록(플레이 수·승률·연승·시도 분포)은 브라우저에만 저장된다.
 연승은 오늘의 문제를 이어서 맞힐 때만 올라가고, 친구가 낸 문제는 기록에 넣지 않는다.
@@ -65,12 +68,18 @@ src/index.html   마크업
 src/style.css    스타일 (색은 원본 스크린샷에서 추출)
 src/hangul.js    자모 분해 · 두벌식 조합 · ASCII 인코딩 · 채점
 src/words.js     생성물 — 정답 풀과 검증 사전
+src/config.js    멀티플레이 빌드 설정 (저장소에는 빈 값)
+src/net.js       Supabase Realtime Broadcast · Presence 어댑터
 src/game.js      게임 로직 · 화면 · 저장 · 공유
+src/room.js      방 로비 · 참가자 · 실시간 대결 UI
 
 tools/fetch-sources.mjs  원본 단어 데이터 내려받기 (1회)
 tools/build-words.mjs    원본 -> src/words.js
 tools/build.mjs          src/* -> dist/*.html
 tools/test-hangul.mjs    단위 테스트
+tools/test-net.mjs       Realtime 프레임 · Presence · 방 규칙 단위 테스트
+tools/spike-realtime.mjs 실제 Supabase 프로토콜 왕복 확인
+tools/room.mjs           실제 Supabase를 쓰는 다중 브라우저 E2E
 tools/shot.mjs           헤드리스 크롬 E2E + 스크린샷
 ```
 
@@ -80,8 +89,24 @@ node tools/build-words.mjs      # src/words.js 다시 만들기
 node tools/build.mjs            # docs/index.html, dist/index.html, dist/artifact.html
 
 node --test tools/test-hangul.mjs   # 단위 테스트
+node --test tools/test-net.mjs      # 멀티플레이 순수 로직 테스트
 node tools/shot.mjs                 # 실제 브라우저로 플레이 검증 + dist/shots/*.png
+node tools/room.mjs                 # 시크릿 브라우저 2개로 실제 방 대결 검증 (설정 없으면 skip)
 ```
+
+### 같이 하기 설정
+
+Supabase 프로젝트의 Realtime Broadcast와 Presence를 사용하며 Postgres 테이블은 만들지 않는다. 저장소 루트의
+`.env.local`에 아래 값을 넣고 빌드한다. 이 파일은 Git에 포함되지 않는다.
+
+```text
+TW_SUPABASE_URL=https://xxxx.supabase.co
+TW_SUPABASE_KEY=eyJ...
+```
+
+`node tools/spike-realtime.mjs`로 실제 채널 입장·Presence·Broadcast 왕복을 먼저 확인한 뒤
+`node tools/build.mjs`를 실행한다. 설정이 없으면 빌드 로그에 멀티플레이가 꺼졌다고 표시되고, 기존 솔로 게임만
+담긴 완전한 오프라인 파일이 만들어진다.
 
 `docs/index.html` 이 GitHub Pages 가 서빙하는 파일이라 유일하게 커밋되는 빌드 산출물이다.
 `dist/` 는 gitignore 되고, 그 안의 `artifact.html` 은 `<html>`·`<head>`·`<body>` 껍데기가 없는

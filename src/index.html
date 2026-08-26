@@ -30,11 +30,29 @@
       <button class="btn primary" data-go="daily">오늘의 문제</button>
       <button class="btn" data-go="free">무한 연습</button>
       <button class="btn ghost" data-go="compose">직접 출제하기</button>
+      <button class="btn accent" data-go="rooms" id="btnRooms" hidden>같이 하기</button>
     </div>
 
     <div class="home-links">
       <button data-sheet="rules">규칙</button>
       <button data-sheet="stats">기록</button>
+    </div>
+  </section>
+
+  <!-- ── 멀티플레이 로비 ──────────────────────────────────────────── -->
+  <section id="lobby" class="screen" hidden>
+    <header class="topbar">
+      <button class="icon" data-go="leave" aria-label="나가기">&#8249;</button>
+      <div class="title"><span>같이 하기</span><small id="lobbyStatus">연결하는 중…</small></div>
+      <span></span>
+    </header>
+    <div class="lobby-body">
+      <p class="muted">방 코드</p>
+      <strong class="room-code" id="roomCode"></strong>
+      <div id="roomInvite"></div>
+      <div class="lobby-heading"><b>참가자</b><span id="roomCount"></span></div>
+      <ul class="roster" id="roomRoster"></ul>
+      <div class="lobby-actions" id="lobbyActions"></div>
     </div>
   </section>
 
@@ -46,6 +64,7 @@
       <button class="icon" id="btnMenu" data-sheet="stats" aria-label="기록">&#9776;</button>
     </header>
 
+    <div class="peers" id="peers" hidden></div>
     <div class="board-wrap"><div class="board" id="board"></div></div>
 
     <div class="keyboard" id="keyboard"></div>
@@ -64,6 +83,9 @@
 
 <script src="hangul.js"></script>
 <script src="words.js"></script>
+<script src="config.js"></script>
+<script src="net.js"></script>
 <script src="game.js"></script>
+<script src="room.js"></script>
 </body>
 </html>

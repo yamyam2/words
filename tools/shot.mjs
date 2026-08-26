@@ -167,6 +167,10 @@ try {
     sizeRows: new Set([...document.querySelectorAll('.chip')].map(c => Math.round(c.getBoundingClientRect().top))).size })`)
   eq('가로 오버플로 없음', layout.doc, layout.vw)
   eq('칸수 칩이 한 줄에 들어감', layout.sizeRows, 1)
+  const offlineRoom = await evaluate(`({ button: document.querySelector('[data-go=rooms]') !== null,
+    available: Net.available, status: Net.status })`)
+  eq('설정 없으면 같이 하기 버튼이 DOM에 없음', offlineRoom.button, false)
+  eq('설정 없으면 네트워크가 꺼짐', offlineRoom, { button: false, available: false, status: 'off' })
   await shot('01-home')
 
   console.log('\n[2] 시민(5칸) — 스크린샷 _02 재현')
@@ -437,6 +441,37 @@ try {
   check('세로 스크롤이 생기지 않음', small.docH <= small.vh + 1, `문서 ${small.docH} / 화면 ${small.vh}`)
   await shot('11-short')
   await shot('10-seven')
+
+  console.log('\n[13] 미니보드가 있는 낮은 게임 화면')
+  const versusLayout = await evaluate(`(async () => {
+    TW.store.set('tw.player.v1', { pid: 'self', nick: '나' })
+    TW.ACTIONS['room-create']()
+    const room = Room.current
+    room.size = 7
+    room.startedAt = Date.now()
+    for (let i = 0; i < 4; i++) room.peers.set('peer' + i, {
+      pid: 'peer' + i, nick: '상대' + (i + 1), joinedAt: i + 2, online: true, status: 'playing',
+      rows: [['correct','present','absent','correct','present','absent','correct']],
+    })
+    TW.startGame('versus', 7, '관심')
+    document.getElementById('peers').hidden = false
+    Room.repaintPeers()
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const board = document.getElementById('board').getBoundingClientRect()
+    const kb = document.getElementById('keyboard').getBoundingClientRect()
+    return { boardBottom: Math.round(board.bottom), kbTop: Math.round(kb.top), tile: Math.round(document.querySelector('#board .tile').getBoundingClientRect().width),
+      docH: document.documentElement.scrollHeight, vh: innerHeight, peers: document.querySelectorAll('#peers .peer').length,
+      peerText: document.getElementById('peers').textContent }
+  })()`)
+  console.log('    ' + JSON.stringify(versusLayout))
+  eq('상대 네 명 미니보드 렌더', versusLayout.peers, 4)
+  check('상대 보드에는 닉네임 외 글자가 없음', !/[ㄱ-ㅎㅏ-ㅣ]/.test(versusLayout.peerText), versusLayout.peerText)
+  check('미니보드가 있어도 보드와 키보드가 겹치지 않음', versusLayout.boardBottom <= versusLayout.kbTop,
+    `보드 끝 ${versusLayout.boardBottom} / 키보드 시작 ${versusLayout.kbTop}`)
+  check('미니보드가 있어도 타일이 30px 이상', versusLayout.tile >= 30, `타일 ${versusLayout.tile}px`)
+  check('미니보드가 있어도 세로 스크롤 없음', versusLayout.docH <= versusLayout.vh + 1, `문서 ${versusLayout.docH} / 화면 ${versusLayout.vh}`)
+  await evaluate('Room.leave()')
+
   console.log('')
   console.log('[12] 출제한 문제를 푼 뒤 오늘의 문제로 넘어가기')
   await call('Emulation.setDeviceMetricsOverride', {

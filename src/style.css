@@ -59,6 +59,7 @@ h1, h2, h3, p { margin: 0; }
   font-size: 14px; font-weight: 600; transition: background .12s, color .12s;
 }
 .chip[aria-pressed="true"] { background: var(--correct); color: var(--ink-on); }
+.chip:disabled { opacity: .35; cursor: default; }
 .menu { display: flex; flex-direction: column; gap: 10px; width: min(100%, 300px); }
 .btn {
   padding: 15px; border-radius: var(--radius); background: var(--key);
@@ -80,6 +81,42 @@ h1, h2, h3, p { margin: 0; }
 .topbar .title small { display: block; font-size: 11px; color: var(--ink-dim); }
 .icon { font-size: 20px; padding: 8px; color: var(--ink-dim); border-radius: 8px; }
 .invisible { visibility: hidden; pointer-events: none; }
+
+/* ── 멀티플레이 로비 · 상대 보드 ─────────────────────────────────── */
+.lobby-body { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 20px calc(24px + env(safe-area-inset-bottom)); text-align: center; }
+.room-code { display: block; margin: 4px 0 18px; font-size: clamp(34px, 12vw, 54px); letter-spacing: .14em; }
+.room-invite { display: flex; gap: 8px; align-items: stretch; margin-bottom: 24px; }
+.room-invite .linkbox { height: auto; min-height: 46px; text-align: left; }
+.room-invite .btn { flex: none; padding: 10px 14px; font-size: 13px; }
+.lobby-heading { display: flex; justify-content: space-between; margin: 8px 2px; font-size: 14px; }
+.lobby-heading span { color: var(--ink-dim); }
+.roster { list-style: none; margin: 0; padding: 0; text-align: left; border-top: 1px solid rgba(255,255,255,.08); }
+.roster li { display: flex; gap: 10px; align-items: center; min-height: 48px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 14px; }
+.roster li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--correct); }
+.roster li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster li span { margin-left: auto; color: var(--ink-dim); font-size: 12px; }
+.lobby-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 22px; }
+.lobby-actions .muted { line-height: 1.5; }
+.room-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 10px 0 18px; }
+
+.peers {
+  flex: none; display: flex; gap: 10px; overflow-x: auto; padding: 6px 10px;
+  scrollbar-width: none; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.peers::-webkit-scrollbar { display: none; }
+.peer { flex: none; text-align: center; }
+.peer.offline { opacity: .4; }
+.peer.done > b { color: var(--correct); }
+.peer > b {
+  display: block; font-size: 10px; color: var(--ink-dim); font-weight: 600;
+  max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mini { display: grid; gap: 1.5px; margin-top: 3px; }
+.mini-row { display: grid; grid-template-columns: repeat(var(--cols), 7px); gap: 1.5px; }
+.mini-tile { width: 7px; height: 7px; border-radius: 1.5px; background: #38383b; }
+.mini-tile.correct { background: var(--correct); }
+.mini-tile.present { background: var(--present); }
+.mini-tile.absent { background: var(--absent); }
 
 .board-wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: min(5vh, 38px) 10px 10px; min-height: 0; }
 /* 보드 폭은 fitBoard() 가 실제 남은 가로·세로 공간을 재서 직접 넣는다.
@@ -178,6 +215,10 @@ h1, h2, h3, p { margin: 0; }
 .answer-reveal b { font-size: 30px; font-weight: 800; letter-spacing: .04em; }
 .answer-reveal span { display: block; margin-top: 8px; }
 .sheet-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.score-list { list-style: none; padding: 0; margin: 10px 0; }
+.score-list li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.score-list li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score-list li span { color: var(--ink-dim); font-size: 12px; }
 
 .field {
   width: 100%; padding: 14px; border-radius: var(--radius); background: #1c1c1e;

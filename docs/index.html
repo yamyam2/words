@@ -69,6 +69,7 @@ h1, h2, h3, p { margin: 0; }
   font-size: 14px; font-weight: 600; transition: background .12s, color .12s;
 }
 .chip[aria-pressed="true"] { background: var(--correct); color: var(--ink-on); }
+.chip:disabled { opacity: .35; cursor: default; }
 .menu { display: flex; flex-direction: column; gap: 10px; width: min(100%, 300px); }
 .btn {
   padding: 15px; border-radius: var(--radius); background: var(--key);
@@ -90,6 +91,42 @@ h1, h2, h3, p { margin: 0; }
 .topbar .title small { display: block; font-size: 11px; color: var(--ink-dim); }
 .icon { font-size: 20px; padding: 8px; color: var(--ink-dim); border-radius: 8px; }
 .invisible { visibility: hidden; pointer-events: none; }
+
+/* ── 멀티플레이 로비 · 상대 보드 ─────────────────────────────────── */
+.lobby-body { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 20px calc(24px + env(safe-area-inset-bottom)); text-align: center; }
+.room-code { display: block; margin: 4px 0 18px; font-size: clamp(34px, 12vw, 54px); letter-spacing: .14em; }
+.room-invite { display: flex; gap: 8px; align-items: stretch; margin-bottom: 24px; }
+.room-invite .linkbox { height: auto; min-height: 46px; text-align: left; }
+.room-invite .btn { flex: none; padding: 10px 14px; font-size: 13px; }
+.lobby-heading { display: flex; justify-content: space-between; margin: 8px 2px; font-size: 14px; }
+.lobby-heading span { color: var(--ink-dim); }
+.roster { list-style: none; margin: 0; padding: 0; text-align: left; border-top: 1px solid rgba(255,255,255,.08); }
+.roster li { display: flex; gap: 10px; align-items: center; min-height: 48px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 14px; }
+.roster li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--correct); }
+.roster li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster li span { margin-left: auto; color: var(--ink-dim); font-size: 12px; }
+.lobby-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 22px; }
+.lobby-actions .muted { line-height: 1.5; }
+.room-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 10px 0 18px; }
+
+.peers {
+  flex: none; display: flex; gap: 10px; overflow-x: auto; padding: 6px 10px;
+  scrollbar-width: none; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.peers::-webkit-scrollbar { display: none; }
+.peer { flex: none; text-align: center; }
+.peer.offline { opacity: .4; }
+.peer.done > b { color: var(--correct); }
+.peer > b {
+  display: block; font-size: 10px; color: var(--ink-dim); font-weight: 600;
+  max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mini { display: grid; gap: 1.5px; margin-top: 3px; }
+.mini-row { display: grid; grid-template-columns: repeat(var(--cols), 7px); gap: 1.5px; }
+.mini-tile { width: 7px; height: 7px; border-radius: 1.5px; background: #38383b; }
+.mini-tile.correct { background: var(--correct); }
+.mini-tile.present { background: var(--present); }
+.mini-tile.absent { background: var(--absent); }
 
 .board-wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: min(5vh, 38px) 10px 10px; min-height: 0; }
 /* 보드 폭은 fitBoard() 가 실제 남은 가로·세로 공간을 재서 직접 넣는다.
@@ -188,6 +225,10 @@ h1, h2, h3, p { margin: 0; }
 .answer-reveal b { font-size: 30px; font-weight: 800; letter-spacing: .04em; }
 .answer-reveal span { display: block; margin-top: 8px; }
 .sheet-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.score-list { list-style: none; padding: 0; margin: 10px 0; }
+.score-list li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.score-list li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score-list li span { color: var(--ink-dim); font-size: 12px; }
 
 .field {
   width: 100%; padding: 14px; border-radius: var(--radius); background: #1c1c1e;
@@ -238,11 +279,29 @@ h1, h2, h3, p { margin: 0; }
       <button class="btn primary" data-go="daily">오늘의 문제</button>
       <button class="btn" data-go="free">무한 연습</button>
       <button class="btn ghost" data-go="compose">직접 출제하기</button>
+      <button class="btn accent" data-go="rooms" id="btnRooms" hidden>같이 하기</button>
     </div>
 
     <div class="home-links">
       <button data-sheet="rules">규칙</button>
       <button data-sheet="stats">기록</button>
+    </div>
+  </section>
+
+  <!-- ── 멀티플레이 로비 ──────────────────────────────────────────── -->
+  <section id="lobby" class="screen" hidden>
+    <header class="topbar">
+      <button class="icon" data-go="leave" aria-label="나가기">&#8249;</button>
+      <div class="title"><span>같이 하기</span><small id="lobbyStatus">연결하는 중…</small></div>
+      <span></span>
+    </header>
+    <div class="lobby-body">
+      <p class="muted">방 코드</p>
+      <strong class="room-code" id="roomCode"></strong>
+      <div id="roomInvite"></div>
+      <div class="lobby-heading"><b>참가자</b><span id="roomCount"></span></div>
+      <ul class="roster" id="roomRoster"></ul>
+      <div class="lobby-actions" id="lobbyActions"></div>
     </div>
   </section>
 
@@ -254,6 +313,7 @@ h1, h2, h3, p { margin: 0; }
       <button class="icon" id="btnMenu" data-sheet="stats" aria-label="기록">&#9776;</button>
     </header>
 
+    <div class="peers" id="peers" hidden></div>
     <div class="board-wrap"><div class="board" id="board"></div></div>
 
     <div class="keyboard" id="keyboard"></div>
@@ -463,6 +523,267 @@ h1, h2, h3, p { margin: 0; }
 })
 </script>
 <script>
+// 빌드할 때 tools/build.mjs 가 아래 한 줄을 통째로 갈아끼운다.
+// 값이 비어 있으면 멀티플레이 기능이 화면에 나타나지 않는다 (오프라인 솔로 게임).
+globalThis.TWConfig = {"url":"","key":""}
+</script>
+<script>
+// Supabase Realtime 의 Broadcast + Presence 만 쓰는 작은 Phoenix 채널 클라이언트.
+// 네트워크/프로토콜 지식은 이 파일 밖으로 새지 않게 유지한다.
+;(function (root, factory) {
+  const api = factory(root)
+  if (typeof module === 'object' && module.exports) module.exports = api
+  else root.Net = api
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
+  'use strict'
+
+  const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ'
+  const APP_EVENTS = ['start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn']
+
+  function encodeFrame(frame) { return JSON.stringify(frame) }
+  function decodeFrame(text) {
+    if (typeof text !== 'string') return null
+    try {
+      const value = JSON.parse(text)
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+    } catch (e) { return null }
+  }
+
+  function presenceMetas(value) {
+    if (!value) return []
+    if (Array.isArray(value)) return value
+    if (Array.isArray(value.metas)) return value.metas
+    return [value]
+  }
+  function normalizePresence(state) {
+    const roster = new Map()
+    for (const [key, value] of Object.entries(state || {})) {
+      for (const meta of presenceMetas(value)) {
+        const pid = String(meta.pid || meta.presence_ref && key || key || '')
+        if (!pid) continue
+        const joinedAt = Number(meta.joinedAt) || Date.now()
+        const prev = roster.get(pid)
+        if (!prev || joinedAt < prev.joinedAt) roster.set(pid, {
+          pid,
+          nick: String(meta.nick || '이름 없음').slice(0, 16),
+          joinedAt,
+        })
+      }
+    }
+    return roster
+  }
+  function mergePresence(roster, joins, leaves) {
+    const next = new Map(roster instanceof Map ? roster : [])
+    const leaving = normalizePresence(leaves)
+    for (const pid of leaving.keys()) next.delete(pid)
+    const joining = normalizePresence(joins)
+    for (const [pid, player] of joining) next.set(pid, player)
+    return next
+  }
+  function electHost(players) {
+    return Array.from(players instanceof Map ? players.values() : players || [])
+      .filter((p) => p && p.online !== false)
+      .sort((a, b) => Number(a.joinedAt) - Number(b.joinedAt) || String(a.pid).localeCompare(String(b.pid)))[0]?.pid || null
+  }
+  function roomCode(random = Math.random) {
+    let code = ''
+    for (let i = 0; i < 6; i++) code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)]
+    return code
+  }
+  function awardPoints(results) {
+    const points = [5, 3, 2]
+    const ranked = (results || []).slice().sort((a, b) => {
+      if (a.status === 'won' && b.status !== 'won') return -1
+      if (a.status !== 'won' && b.status === 'won') return 1
+      return (a.tries || 99) - (b.tries || 99) || (a.ms || Infinity) - (b.ms || Infinity)
+    })
+    const out = {}
+    let place = 0
+    for (const result of ranked) {
+      out[result.pid] = result.status === 'won' ? (points[place++] || 1) : 0
+    }
+    return out
+  }
+
+  const cfg = root.TWConfig || { url: '', key: '' }
+  const available = Boolean(cfg.url && cfg.key && typeof root.WebSocket === 'function')
+  const listeners = new Map()
+  let status = available ? 'down' : 'off'
+  let socket = null
+  let topic = null
+  let code = null
+  let me = null
+  let ref = 0
+  let joinRef = null
+  let heartbeat = null
+  let retryTimer = null
+  let retryCount = 0
+  let intentional = false
+  let roster = new Map()
+  const queue = []
+
+  function emit(event, payload) {
+    for (const fn of listeners.get(event) || []) {
+      try { fn(payload) } catch (e) { setTimeout(() => { throw e }, 0) }
+    }
+  }
+  function setStatus(value) {
+    if (status === value) return
+    status = value
+    emit('status', value)
+  }
+  function on(event, cb) {
+    if (!listeners.has(event)) listeners.set(event, new Set())
+    listeners.get(event).add(cb)
+    return () => listeners.get(event)?.delete(cb)
+  }
+  function nextRef() { return String(++ref) }
+  function wireUrl() {
+    const url = new URL(cfg.url)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    url.pathname = url.pathname.replace(/\/$/, '') + '/realtime/v1/websocket'
+    url.search = ''
+    url.searchParams.set('apikey', cfg.key)
+    url.searchParams.set('vsn', '1.0.0')
+    return url.href
+  }
+  function push(frame) {
+    if (!socket || socket.readyState !== 1) return false
+    socket.send(encodeFrame(frame))
+    return true
+  }
+  function broadcast(event, payload) {
+    return push({ topic, event: 'broadcast', ref: nextRef(), join_ref: joinRef, payload: {
+      type: 'broadcast', event, payload,
+    } })
+  }
+  function flush() {
+    while (queue.length && status === 'live') {
+      const item = queue.shift()
+      if (!broadcast(item.event, item.payload)) { queue.unshift(item); break }
+    }
+  }
+  function publishRoster() { emit('roster', Array.from(roster.values())) }
+  function track() {
+    push({ topic, event: 'presence', ref: nextRef(), join_ref: joinRef, payload: {
+      type: 'presence', event: 'track', payload: {
+        nick: me.nick, pid: me.pid, joinedAt: me.joinedAt,
+      },
+    } })
+  }
+  function handleMessage(event) {
+    const frame = decodeFrame(typeof event.data === 'string' ? event.data : '')
+    if (!frame) return
+    if (frame.event === 'phx_reply' && frame.ref === joinRef) {
+      if (frame.payload?.status === 'ok') {
+        retryCount = 0
+        setStatus('live')
+        track()
+        flush()
+      } else {
+        setStatus('down')
+        socket?.close()
+      }
+      return
+    }
+    if (frame.event === 'presence_state') {
+      roster = normalizePresence(frame.payload)
+      publishRoster()
+      return
+    }
+    if (frame.event === 'presence_diff') {
+      roster = mergePresence(roster, frame.payload?.joins, frame.payload?.leaves)
+      publishRoster()
+      return
+    }
+    if (frame.event === 'broadcast') {
+      const eventName = frame.payload?.event
+      if (eventName) emit(eventName, frame.payload?.payload || {})
+      return
+    }
+    if (frame.event === 'phx_error' || frame.event === 'phx_close') socket?.close()
+  }
+  function scheduleRetry() {
+    if (intentional || !code) return
+    clearTimeout(retryTimer)
+    setStatus('retry')
+    const delay = Math.min(30000, 1000 * (2 ** retryCount++))
+    retryTimer = setTimeout(openSocket, delay)
+  }
+  function openSocket() {
+    if (intentional || !code) return
+    clearTimeout(retryTimer)
+    clearInterval(heartbeat)
+    setStatus(retryCount ? 'retry' : 'connecting')
+    try { socket = new root.WebSocket(wireUrl()) } catch (e) { scheduleRetry(); return }
+    socket.addEventListener('open', () => {
+      joinRef = nextRef()
+      push({ topic, event: 'phx_join', ref: joinRef, join_ref: joinRef, payload: {
+        config: {
+          broadcast: { self: false, ack: false },
+          presence: { key: me.pid, enabled: true },
+          postgres_changes: [],
+          private: false,
+        },
+        ...(String(cfg.key).split('.').length === 3 ? { access_token: cfg.key } : {}),
+      } })
+      heartbeat = setInterval(() => push({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: nextRef() }), 30000)
+    })
+    socket.addEventListener('message', handleMessage)
+    socket.addEventListener('error', () => setStatus('down'))
+    socket.addEventListener('close', () => {
+      clearInterval(heartbeat)
+      socket = null
+      if (!intentional) scheduleRetry()
+    })
+  }
+  function connect(nextCode, player) {
+    if (!available) return Promise.reject(new Error('멀티플레이 설정이 없습니다'))
+    leave()
+    code = String(nextCode || '').toUpperCase()
+    if (!/^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{6}$/.test(code)) return Promise.reject(new Error('방 코드는 6자리입니다'))
+    me = { pid: String(player.pid), nick: String(player.nick), joinedAt: Number(player.joinedAt) || Date.now() }
+    topic = `realtime:tw:${code}`
+    intentional = false
+    openSocket()
+    return new Promise((resolve, reject) => {
+      const stop = on('status', (value) => {
+        if (value === 'live') { stop(); clearTimeout(timer); resolve() }
+      })
+      const timer = setTimeout(() => { stop(); reject(new Error('방에 연결하는 중입니다')) }, 12000)
+    })
+  }
+  function leave() {
+    intentional = true
+    clearTimeout(retryTimer)
+    clearInterval(heartbeat)
+    if (socket && socket.readyState === 1 && topic) push({ topic, event: 'phx_leave', payload: {}, ref: nextRef(), join_ref: joinRef })
+    socket?.close()
+    socket = null
+    topic = null
+    code = null
+    me = null
+    roster = new Map()
+    queue.length = 0
+    setStatus(available ? 'down' : 'off')
+  }
+  function send(event, payload) {
+    if (!APP_EVENTS.includes(event)) return false
+    if (status === 'live') return broadcast(event, payload)
+    if (code) { queue.push({ event, payload }); return true }
+    return false
+  }
+
+  return {
+    available,
+    get status() { return status },
+    connect, leave, send, on,
+    encodeFrame, decodeFrame, normalizePresence, mergePresence, electHost, roomCode, awardPoints,
+    CODE_ALPHABET,
+  }
+})
+</script>
+<script>
 // 오늘의 단어 — 게임 로직
 // 보드는 자모 단위로만 다룬다. 조합된 글자는 정답을 공개할 때만 보여준다.
 ;(function () {
@@ -487,7 +808,10 @@ h1, h2, h3, p { margin: 0; }
     z: 'ㅋ', x: 'ㅌ', c: 'ㅊ', v: 'ㅍ', b: 'ㅠ', n: 'ㅜ', m: 'ㅡ',
   }
   const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '⬜' }
-  const MODE_LABEL = { daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제' }
+  const MODE_LABEL = {
+    daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제',
+    versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동',
+  }
 
   const $ = (sel) => document.querySelector(sel)
   const el = { home: $('#home'), game: $('#game'), board: $('#board'), keyboard: $('#keyboard'),
@@ -587,6 +911,8 @@ h1, h2, h3, p { margin: 0; }
   // ── 상태 ─────────────────────────────────────────────────────────────
   let state = null
   let busy = false
+  let judge = (guess) => H.score(guess, state.answerJamo)
+  let pending = []
   let pickedSize = store.get('tw.settings.v1', { size: 5 }).size
 
   const isValid = (jamo) => W.validSet(jamo.length).has(H.encode(jamo))
@@ -598,7 +924,7 @@ h1, h2, h3, p { margin: 0; }
       mode, size, answer, locked: Boolean(locked),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
-      date: kstToday(),
+      date: kstToday(), room: globalThis.Room?.current?.code || null,
     }
     if (mode === 'daily') restoreDaily()
     showGame()
@@ -631,7 +957,7 @@ h1, h2, h3, p { margin: 0; }
     return s
   }
   function recordResult() {
-    if (state.mode === 'custom') return          // 남이 낸 문제는 기록에 넣지 않는다
+    if (state.mode !== 'daily' && state.mode !== 'free') return
     const stats = loadStats()
     const s = stats[state.size]
     s.played++
@@ -654,12 +980,16 @@ h1, h2, h3, p { margin: 0; }
     state = null
     if (location.hash) history.replaceState(null, '', location.pathname + location.search)
     el.game.hidden = true
+    const lobby = $('#lobby')
+    if (lobby) lobby.hidden = true
     el.home.hidden = false
     paintSizePicker()
   }
   function showGame() {
     closeSheet()          // 해시로 들어오면 열려 있던 시트가 그대로 남는다
     el.home.hidden = true
+    const lobby = $('#lobby')
+    if (lobby) lobby.hidden = true
     el.game.hidden = false
     el.resultbar.hidden = true
     // hidden 으로 감추면 그리드 칸이 무너져 제목이 눌린다. 자리는 남기고 안 보이게만 한다.
@@ -794,22 +1124,32 @@ h1, h2, h3, p { margin: 0; }
     if (last) { last.classList.remove('pop'); void last.offsetWidth; last.classList.add('pop') }
   }
 
-  function submit() {
+  async function submit() {
     const guess = state.current
     if (guess.length < state.size) return reject('자모를 다 채워주세요')
     if (!isValid(guess)) return reject('사전에 없는 단어예요')
+
+    // 비동기 채점기로 교체해도 같은 입력이 두 번 제출되지 않게 채점 전에 잠근다.
+    busy = true
+    const activeState = state
+    let marks
+    try { marks = await judge(guess.slice()) } catch (e) {
+      busy = false
+      toast('채점하지 못했어요. 다시 시도해 주세요')
+      return
+    }
+    if (state !== activeState) { busy = false; return }
 
     state.guesses.push(guess.slice())
     state.current = []
     const rowIndex = state.guesses.length - 1
     paint(rowIndex)
 
-    const marks = H.score(guess, state.answerJamo)
     const won = marks.every((m) => m === 'correct')
     if (won) state.status = 'won'
     else if (state.guesses.length >= MAX_TRIES) state.status = 'lost'
+    if (state.room) globalThis.Room?.localMark(rowIndex, marks)
 
-    busy = true
     const tiles = el.board.children[rowIndex].children
     marks.forEach((mark, i) => {
       setTimeout(() => {
@@ -821,9 +1161,18 @@ h1, h2, h3, p { margin: 0; }
       busy = false
       paintKeyboard()
       saveDaily()
-      if (state.status !== 'playing') { recordResult(); finish() }
+      if (state.status !== 'playing') {
+        recordResult()
+        if (state.room) globalThis.Room?.localDone(state.status, state.guesses.length)
+        finish()
+      }
+      const q = pending
+      pending = []
+      for (const fn of q) { try { fn() } catch (e) { /* 원격 이벤트 하나가 뒤 큐를 막지 않게 한다 */ } }
     }, marks.length * 180 + 420)
   }
+  function setJudge(next) { judge = typeof next === 'function' ? next : (guess) => H.score(guess, state.answerJamo) }
+  function applyRemote(fn) { if (busy) pending.push(fn); else fn() }
   function reject(message) {
     toast(message)
     const row = el.board.children[state.guesses.length]
@@ -831,6 +1180,7 @@ h1, h2, h3, p { margin: 0; }
   }
 
   function finish(restored) {
+    if (state.room) { el.resultbar.hidden = true; return }
     el.resultbar.hidden = false
     if (state.status === 'won' && !restored) {
       const tiles = el.board.children[state.guesses.length - 1].children
@@ -1095,6 +1445,22 @@ h1, h2, h3, p { margin: 0; }
     $('#composeOut').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
+  // 다른 기능 파일이 화면 이동과 액션을 자기 키로 등록할 수 있는 작은 확장점.
+  const GOES = {
+    home: showHome,
+    again: () => startGame(state.mode === 'custom' ? 'free' : state.mode, resolveSize()),
+    daily: () => startGame('daily', resolveSize()),
+    free: () => startGame('free', resolveSize()),
+    compose: () => openSheet('compose'),
+  }
+  const ACTIONS = {
+    'make-link': makeLink,
+    join: joinPuzzle,
+    share: () => copyAndTell(shareText(), '결과를 복사했어요'),
+    'copy-link': () => copyAndTell($('#composeLink').value, shareUrl() ? '링크를 복사했어요' : '문제 코드를 복사했어요'),
+    'try-link': () => { closeSheet(); startGame('custom', Array.from(H.decompose(composedWord)).length, composedWord) },
+  }
+
   // ── 이벤트 ───────────────────────────────────────────────────────────
   document.addEventListener('click', (ev) => {
     const target = ev.target.closest('[data-key],[data-go],[data-sheet],[data-act],[data-close],[data-size]')
@@ -1111,24 +1477,16 @@ h1, h2, h3, p { margin: 0; }
       return paintSizePicker()
     }
     if (target.dataset.go) {
-      const go = target.dataset.go
       closeSheet()
-      if (go === 'home') return showHome()
-      if (go === 'again') return startGame(state.mode === 'custom' ? 'free' : state.mode, resolveSize())
-      if (go === 'daily' || go === 'free') {
-        if (go === 'free' && state) return startGame('free', resolveSize())
-        return startGame(go, resolveSize())
-      }
-      if (go === 'compose') return openSheet('compose')
+      const fn = GOES[target.dataset.go]
+      if (fn) return fn(target, ev)
     }
     if (target.dataset.sheet) return openSheet(target.dataset.sheet)
 
-    const act = target.dataset.act
-    if (act === 'make-link') return makeLink()
-    if (act === 'join') return joinPuzzle()
-    if (act === 'share') return copyAndTell(shareText(), '결과를 복사했어요')
-    if (act === 'copy-link') return copyAndTell($('#composeLink').value, shareUrl() ? '링크를 복사했어요' : '문제 코드를 복사했어요')
-    if (act === 'try-link') { closeSheet(); return startGame('custom', Array.from(H.decompose(composedWord)).length, composedWord) }
+    if (target.dataset.act) {
+      const fn = ACTIONS[target.dataset.act]
+      if (fn) return fn(target, ev)
+    }
   })
 
   document.addEventListener('input', (ev) => { if (ev.target.id === 'composeInput') onComposeInput() })
@@ -1156,7 +1514,12 @@ h1, h2, h3, p { margin: 0; }
   })
   // ── 시작 ─────────────────────────────────────────────────────────────
   function bootFromHash() {
-    if (!/[#&]([wp])=/.test(location.hash)) return false
+    const roomMatch = /[#&]r=([23456789ABCDEFGHJKMNPQRSTVWXYZ]{6})/i.exec(location.hash)
+    if (roomMatch) {
+      globalThis.TWRoomHash = roomMatch[1].toUpperCase()
+      return false
+    }
+    if (!/[#&]([wpr])=/.test(location.hash)) return false
     const puzzle = readPuzzle(location.hash)
     if (!puzzle) return false
     startGame('custom', puzzle.size, puzzle.word, puzzle.locked)
@@ -1167,7 +1530,519 @@ h1, h2, h3, p { margin: 0; }
   window.addEventListener('hashchange', () => { if (!bootFromHash()) showHome() })
 
   // 브라우저 콘솔·자동 테스트용 훅
-  globalThis.TW = { press, submit, startGame, get state() { return state }, shareText, shareUrl }
+  globalThis.TW = {
+    press, submit, startGame,
+    get state() { return state },
+    get busy() { return busy },
+    shareText, shareUrl, freeAnswer, resolveSize,
+    SHEETS, GOES, ACTIONS, openSheet, closeSheet, toast, store, isValid, b64url,
+    MAX_TRIES, SIZES, setJudge, applyRemote,
+    repaint: () => { if (state) paint() },
+    restoreRoomGame: (guesses, status = 'playing') => {
+      if (!state || !state.room) return
+      state.guesses = (guesses || []).map((guess) => Array.from(guess).slice(0, state.size))
+      state.current = []
+      state.status = ['playing', 'won', 'lost'].includes(status) ? status : 'playing'
+      paint()
+    },
+    endRoomGame: () => {
+      if (!state || !state.room || state.status !== 'playing') return
+      state.status = 'lost'
+      state.current = []
+      paint()
+      el.resultbar.hidden = true
+    },
+    copyAndTell,
+  }
+})()
+</script>
+<script>
+// 멀티플레이 방 UI와 상태 기계. 네트워크 구현 세부사항은 Net 에만 맡긴다.
+;(function () {
+  'use strict'
+
+  const Net = globalThis.Net
+  const TW = globalThis.TW
+  const H = globalThis.Hangul
+  const $ = (sel) => document.querySelector(sel)
+  const esc = (value) => String(value).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const MARK_TO_WIRE = { absent: '0', present: '1', correct: '2' }
+  const WIRE_TO_MARK = ['absent', 'present', 'correct']
+
+  let room = null
+  let draft = { kind: 'versus', size: 5, roundsTotal: 1 }
+  let timer = null
+
+  function makePid() {
+    const bytes = new Uint8Array(12)
+    if (globalThis.crypto?.getRandomValues) crypto.getRandomValues(bytes)
+    else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
+    return Array.from(bytes, (n) => n.toString(36).padStart(2, '0')).join('')
+  }
+  function savedPlayer() {
+    const saved = TW.store.get('tw.player.v1', {})
+    return { pid: saved.pid || makePid(), nick: saved.nick || '' }
+  }
+  function normalizeCode(value) {
+    const match = String(value || '').toUpperCase().match(/(?:[#&?]r=)?([23456789ABCDEFGHJKMNPQRSTVWXYZ]{6})(?:\b|$)/)
+    return match ? match[1] : null
+  }
+  function inviteText() {
+    const base = TW.shareUrl()
+    return base ? `${base}#r=${room.code}` : room.code
+  }
+  function playerRows(player) {
+    if (!player.rows) player.rows = []
+    return player.rows
+  }
+  function displayNames(players) {
+    const counts = new Map()
+    return players.map((player) => {
+      const n = (counts.get(player.nick) || 0) + 1
+      counts.set(player.nick, n)
+      return [player.pid, n === 1 ? player.nick : `${player.nick}${n}`]
+    })
+  }
+  function players() { return room ? Array.from(room.peers.values()) : [] }
+  function persistRoom() {
+    if (!room) return TW.store.set('tw.room.v1', null)
+    const state = TW.state
+    TW.store.set('tw.room.v1', {
+      code: room.code, nick: room.me.nick, kind: room.kind, size: room.size,
+      round: room.round, roundsTotal: room.roundsTotal,
+      active: Boolean(room.startedAt),
+      guesses: state?.room === room.code ? state.guesses.map((guess) => H.encode(guess)) : [],
+      status: state?.room === room.code ? state.status : 'playing',
+    })
+  }
+
+  TW.SHEETS.rooms = () => {
+    const player = savedPlayer()
+    const preset = globalThis.TWRoomHash || ''
+    return `
+      <h2>같이 하기</h2>
+      <p class="muted">친구들과 같은 문제를 동시에 풀고, 서로의 색상 보드를 실시간으로 볼 수 있어요.</p>
+      <div style="margin-top:16px">
+        <input class="field" id="roomNick" ${preset ? 'autofocus' : ''} placeholder="닉네임" maxlength="16"
+               value="${esc(player.nick)}" autocomplete="nickname" autocapitalize="off" spellcheck="false">
+        <div class="hint" id="roomHint"></div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn primary" data-act="room-open-create">새 방 만들기</button>
+      </div>
+      <div class="hr"></div>
+      <p><b>방 코드로 들어가기</b></p>
+      <div style="margin-top:10px">
+        <input class="field" id="roomJoinCode" placeholder="6자리 코드" maxlength="80"
+               value="${esc(preset)}" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" data-act="room-join">들어가기</button>
+      </div>`
+  }
+  TW.SHEETS.create = () => `
+    <h2>방 만들기</h2>
+    <p><b>모드</b></p>
+    <div class="room-options" id="roomModes">
+      <button class="chip" data-rmode="versus" aria-pressed="${draft.kind === 'versus'}">같은 단어 대결</button>
+      <button class="chip" data-rmode="setter" disabled>출제 대결</button>
+      <button class="chip" data-rmode="relay" disabled>릴레이</button>
+      <button class="chip" data-rmode="coop" disabled>협동</button>
+    </div>
+    <p><b>칸 수</b></p>
+    <div class="room-options" id="roomSizes">
+      ${[4, 5, 6, 7, 0].map((n) => `<button class="chip" data-rsize="${n}" aria-pressed="${draft.size === n}">${n || '랜덤'}${n ? '칸' : ''}</button>`).join('')}
+    </div>
+    <p class="muted">현재는 같은 단어 대결을 먼저 지원합니다. 나머지 모드는 단계적으로 열립니다.</p>
+    <div class="sheet-actions">
+      <button class="btn primary" data-act="room-create">방 만들기</button>
+    </div>`
+  TW.SHEETS.roommenu = () => {
+    if (!room) return '<h2>방을 찾지 못했어요</h2>'
+    const elapsed = room.startedAt ? Math.floor((Date.now() - room.startedAt) / 1000) : 0
+    return `
+      <h2>대결 메뉴</h2>
+      <p class="muted">방 코드 <b>${esc(room.code)}</b> · ${Math.floor(elapsed / 60)}분 ${elapsed % 60}초</p>
+      <div class="sheet-actions">
+        <button class="btn ghost" data-act="room-copy">초대 ${TW.shareUrl() ? '링크' : '코드'} 복사</button>
+        ${room.host && room.startedAt && !room.over ? '<button class="btn accent" data-act="room-force">모두 강제 종료</button>' : ''}
+        <button class="btn ghost" data-go="leave">방 나가기</button>
+      </div>`
+  }
+
+  TW.GOES.rooms = () => TW.openSheet('rooms')
+  TW.GOES.leave = leaveRoom
+  TW.ACTIONS['room-open-create'] = () => {
+    const nick = readNick()
+    if (!nick) return
+    TW.store.set('tw.player.v1', { ...savedPlayer(), nick })
+    TW.openSheet('create')
+  }
+  TW.ACTIONS['room-create'] = () => enterRoom(Net.roomCode(), savedPlayer().nick, draft)
+  TW.ACTIONS['room-join'] = () => {
+    const nick = readNick()
+    const code = normalizeCode($('#roomJoinCode')?.value)
+    if (!nick) return
+    if (!code) return setRoomHint('6자리 방 코드를 확인해 주세요')
+    enterRoom(code, nick, { kind: 'versus', size: 5, roundsTotal: 1 })
+  }
+  TW.ACTIONS['room-start'] = startRound
+  TW.ACTIONS['room-force'] = forceRound
+  TW.ACTIONS['room-copy'] = () => TW.copyAndTell(inviteText(), TW.shareUrl() ? '초대 링크를 복사했어요' : '방 코드를 복사했어요')
+  TW.ACTIONS['room-copy-result'] = copyResult
+
+  function readNick() {
+    const input = $('#roomNick')
+    const nick = String(input?.value || savedPlayer().nick).trim().replace(/\s+/g, ' ').slice(0, 16)
+    if (!nick) { setRoomHint('닉네임을 입력해 주세요'); input?.focus(); return null }
+    return nick
+  }
+  function setRoomHint(message) {
+    const hint = $('#roomHint')
+    if (hint) { hint.textContent = message; hint.className = 'hint bad' }
+  }
+
+  function showLobby() {
+    TW.closeSheet()
+    $('#home').hidden = true
+    $('#game').hidden = true
+    $('#lobby').hidden = false
+    $('#roomCode').textContent = room.code
+    const base = TW.shareUrl()
+    $('#roomInvite').innerHTML = `<div class="room-invite">
+      ${base ? `<textarea class="linkbox" readonly>${esc(inviteText())}</textarea>` : '<p class="muted" style="text-align:left;flex:1">게임 주소와 이 코드를 함께 보내세요.</p>'}
+      <button class="btn ghost" data-act="room-copy">${base ? '링크 복사' : '코드 복사'}</button>
+    </div>`
+    renderLobby()
+  }
+  function renderLobby() {
+    if (!room || $('#lobby').hidden) return
+    const list = players().sort((a, b) => a.joinedAt - b.joinedAt || a.pid.localeCompare(b.pid))
+    const names = new Map(displayNames(list))
+    $('#roomCount').textContent = `${list.length}명`
+    $('#roomRoster').innerHTML = list.map((player) => `<li>
+      <b>${esc(names.get(player.pid))}${player.pid === room.me.pid ? ' (나)' : ''}</b>
+      <span>${player.pid === room.hostPid ? '방장' : '참가자'}</span>
+    </li>`).join('')
+    const live = Net.status === 'live'
+    $('#lobbyActions').innerHTML = room.host
+      ? `<button class="btn primary" data-act="room-start" ${live ? '' : 'disabled'}>시작하기</button>
+         <button class="btn ghost" data-go="leave">나가기</button>`
+      : `<p class="muted">방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
+    $('#lobbyStatus').textContent = statusLabel(Net.status)
+  }
+  function statusLabel(status) {
+    return ({ off: '오프라인', connecting: '연결하는 중…', live: '연결됨', retry: '다시 연결하는 중…', down: '연결을 기다리는 중…' })[status] || status
+  }
+
+  function enterRoom(code, nick, options, resume) {
+    const old = savedPlayer()
+    const me = { pid: old.pid, nick, joinedAt: Date.now(), role: 'player' }
+    TW.store.set('tw.player.v1', { pid: me.pid, nick })
+    draft = { ...draft, ...options }
+    room = {
+      code, kind: draft.kind, round: 1, roundsTotal: draft.roundsTotal,
+      size: draft.size, me, host: false, hostPid: null,
+      peers: new Map([[me.pid, { ...me, rows: [], status: 'waiting', online: true }]]),
+      activePids: new Set(), results: new Map(), startedAt: null, answer: null, over: false,
+      resume: resume || null,
+    }
+    globalThis.TWRoomHash = null
+    persistRoom()
+    showLobby()
+    Net.connect(code, me).catch(() => {
+      if (room?.code === code) TW.toast('방을 깨우는 중이에요. 자동으로 다시 연결할게요', 2600)
+    })
+  }
+  function leaveRoom() {
+    clearInterval(timer)
+    timer = null
+    Net.leave()
+    room = null
+    TW.store.set('tw.room.v1', null)
+    document.body.classList.remove('watching')
+    $('#keyboard').hidden = false
+    $('.board-wrap').hidden = false
+    $('#peers').hidden = true
+    $('#btnBack').dataset.go = 'home'
+    $('#btnMenu').dataset.sheet = 'stats'
+    $('#btnMenu').textContent = '☰'
+    $('#btnMenu').setAttribute('aria-label', '기록')
+    TW.GOES.home()
+  }
+
+  function onRoster(roster) {
+    if (!room) return
+    const online = new Set()
+    for (const person of roster) {
+      online.add(person.pid)
+      const previous = room.peers.get(person.pid) || { rows: [], status: room.startedAt ? 'spectator' : 'waiting' }
+      room.peers.set(person.pid, { ...previous, ...person, online: true })
+    }
+    for (const player of room.peers.values()) player.online = online.has(player.pid)
+    room.hostPid = Net.electHost(roster)
+    room.host = room.hostPid === room.me.pid
+    renderLobby()
+    renderPeers()
+  }
+  function onStatus(status) {
+    renderLobby()
+    if (!room) return
+    if (status === 'retry') TW.toast('연결이 끊겨 다시 연결하고 있어요', 2200)
+    if (status === 'live') Net.send('sync?', { pid: room.me.pid })
+  }
+
+  function resolvedRoomSize() {
+    return draft.size === 0 ? TW.SIZES[Math.floor(Math.random() * TW.SIZES.length)] : draft.size
+  }
+  function startRound() {
+    if (!room?.host || Net.status !== 'live') return
+    const size = resolvedRoomSize()
+    const answer = TW.freeAnswer(size)
+    const payload = { round: room.round, kind: room.kind, size, answer: H.encode(H.decompose(answer)), setter: null, ts: Date.now() }
+    Net.send('start', payload)
+    beginRound(payload)
+  }
+  function decodeAnswer(value) {
+    try { return H.compose(H.decode(String(value || ''))) } catch (e) { return null }
+  }
+  function beginRound(payload, spectator) {
+    if (!room || Number(payload.round) < room.round) return
+    const answer = decodeAnswer(payload.answer)
+    if (!answer || !TW.SIZES.includes(Number(payload.size))) return
+    room.round = Number(payload.round) || 1
+    room.kind = payload.kind || 'versus'
+    room.size = Number(payload.size)
+    room.answer = answer
+    room.startedAt = Date.now()
+    room.over = false
+    room.results = new Map()
+    room.activePids = new Set(players().filter((p) => p.online).map((p) => p.pid))
+    for (const player of room.peers.values()) {
+      player.rows = []
+      player.status = spectator && player.pid === room.me.pid ? 'spectator' : 'playing'
+      player.tries = null
+      player.ms = null
+    }
+    room.me.role = spectator ? 'spectator' : 'player'
+    TW.startGame(room.kind, room.size, answer)
+    $('#btnBack').dataset.go = 'leave'
+    $('#btnMenu').dataset.sheet = 'roommenu'
+    $('#btnMenu').textContent = '☰'
+    $('#btnMenu').setAttribute('aria-label', '대결 메뉴')
+    document.body.classList.toggle('watching', Boolean(spectator))
+    $('#keyboard').hidden = Boolean(spectator)
+    $('.board-wrap').hidden = Boolean(spectator)
+    $('#peers').hidden = false
+    renderPeers()
+    startTimer()
+    persistRoom()
+  }
+  function startTimer() {
+    clearInterval(timer)
+    const tick = () => {
+      if (!room?.startedAt || room.over) return
+      const seconds = Math.floor((Date.now() - room.startedAt) / 1000)
+      const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
+      const ss = String(seconds % 60).padStart(2, '0')
+      $('#gameSub').textContent = `${room.size}칸 · ${mm}:${ss}`
+    }
+    tick()
+    timer = setInterval(tick, 1000)
+  }
+
+  function localMark(row, marks) {
+    if (!room) return
+    const player = room.peers.get(room.me.pid)
+    if (player) playerRows(player)[row] = marks.slice()
+    Net.send('mark', { pid: room.me.pid, row, marks: marks.map((m) => MARK_TO_WIRE[m]).join('') })
+    renderPeers()
+    persistRoom()
+  }
+  function localDone(status, tries) {
+    if (!room || room.me.role === 'spectator') return
+    const result = { pid: room.me.pid, status, tries, ms: Date.now() - room.startedAt }
+    room.results.set(result.pid, result)
+    Object.assign(room.peers.get(result.pid), result)
+    Net.send('done', result)
+    renderPeers()
+    persistRoom()
+    maybeFinish()
+  }
+  function onMark(payload) {
+    if (!room || !room.startedAt || payload.pid === room.me.pid) return
+    const player = room.peers.get(String(payload.pid))
+    if (!player || !/^[012]+$/.test(String(payload.marks)) || String(payload.marks).length !== room.size) return
+    const row = Number(payload.row)
+    if (!(row >= 0 && row < TW.MAX_TRIES)) return
+    playerRows(player)[row] = Array.from(String(payload.marks), (n) => WIRE_TO_MARK[Number(n)] || 'absent')
+    renderPeers()
+  }
+  function onDone(payload) {
+    if (!room || !room.startedAt || payload.pid === room.me.pid) return
+    const player = room.peers.get(String(payload.pid))
+    if (!player) return
+    const result = {
+      pid: player.pid,
+      status: payload.status === 'won' ? 'won' : 'lost',
+      tries: Math.max(1, Math.min(TW.MAX_TRIES, Number(payload.tries) || TW.MAX_TRIES)),
+      ms: Math.max(0, Number(payload.ms) || 0),
+    }
+    room.results.set(result.pid, result)
+    Object.assign(player, result)
+    renderPeers()
+    maybeFinish()
+  }
+  function maybeFinish() {
+    if (!room?.host || room.over || !room.activePids.size) return
+    if (Array.from(room.activePids).every((pid) => room.results.has(pid))) finishRound()
+  }
+  function forceRound() {
+    if (!room?.host || room.over) return
+    const elapsed = Date.now() - room.startedAt
+    for (const pid of room.activePids) {
+      if (!room.results.has(pid)) room.results.set(pid, { pid, status: 'lost', tries: TW.MAX_TRIES, ms: elapsed })
+    }
+    finishRound()
+  }
+  function finishRound() {
+    if (!room || room.over) return
+    room.over = true
+    const scores = Array.from(room.results.values())
+    const payload = { round: room.round, scores }
+    Net.send('over', payload)
+    TW.applyRemote(() => showScoreboard(scores))
+  }
+  function onOver(payload) {
+    if (!room || Number(payload.round) !== room.round || !Array.isArray(payload.scores)) return
+    TW.applyRemote(() => showScoreboard(payload.scores))
+  }
+  function sortedResults(results) {
+    return results.slice().sort((a, b) => {
+      if (a.status === 'won' && b.status !== 'won') return -1
+      if (a.status !== 'won' && b.status === 'won') return 1
+      return (a.tries || 99) - (b.tries || 99) || (a.ms || Infinity) - (b.ms || Infinity)
+    })
+  }
+  function showScoreboard(results) {
+    if (!room) return
+    clearInterval(timer)
+    room.over = true
+    room.scoreResults = sortedResults(results)
+    TW.endRoomGame()
+    persistRoom()
+    TW.openSheet('scoreboard')
+  }
+  TW.SHEETS.scoreboard = () => {
+    const list = room?.scoreResults || []
+    const names = new Map(displayNames(players().sort((a, b) => a.joinedAt - b.joinedAt)))
+    return `
+      <h2>대결 결과</h2>
+      <div class="answer-reveal"><b>${esc(room?.answer || '')}</b><span>${room?.size || ''}칸</span></div>
+      <ol class="score-list">${list.map((result, i) => `<li>
+        <strong>${i + 1}</strong><b>${esc(names.get(result.pid) || '나간 참가자')}</b>
+        <span>${result.status === 'won' ? `${result.tries}/${TW.MAX_TRIES} · ${(result.ms / 1000).toFixed(1)}초` : `X/${TW.MAX_TRIES}`}</span>
+      </li>`).join('')}</ol>
+      <div class="sheet-actions">
+        <button class="btn accent" data-act="room-copy-result">결과 복사하기</button>
+        <button class="btn ghost" data-go="leave">나가기</button>
+      </div>`
+  }
+  function copyResult() {
+    const rows = room.scoreResults.map((result, i) => `${i + 1}. ${room.peers.get(result.pid)?.nick || '나간 참가자'} · ${result.status === 'won' ? `${result.tries}/${TW.MAX_TRIES} · ${(result.ms / 1000).toFixed(1)}초` : `X/${TW.MAX_TRIES}`}`)
+    TW.copyAndTell([`오늘의 단어 같이 하기 · ${room.size}칸`, `정답 ${room.answer}`, ...rows, inviteText()].join('\n'), '대결 결과를 복사했어요')
+  }
+
+  function renderPeers() {
+    if (!room || !room.startedAt) return
+    const peerList = players().filter((p) => p.pid !== room.me.pid)
+    const names = new Map(displayNames(players().sort((a, b) => a.joinedAt - b.joinedAt)))
+    $('#peers').innerHTML = peerList.map((player) => {
+      const rows = Array.from({ length: TW.MAX_TRIES }, (_, row) => {
+        const marks = player.rows?.[row] || []
+        return `<div class="mini-row" style="--cols:${room.size}">${Array.from({ length: room.size }, (_, col) => `<i class="mini-tile ${marks[col] || ''}"></i>`).join('')}</div>`
+      }).join('')
+      return `<div class="peer ${player.online ? '' : 'offline'} ${player.status === 'won' || player.status === 'lost' ? 'done' : ''}" data-pid="${esc(player.pid)}">
+        <b>${esc(names.get(player.pid))}</b><div class="mini">${rows}</div>
+      </div>`
+    }).join('')
+  }
+
+  function onSyncRequest(payload) {
+    if (!room?.host || !room.startedAt || payload.pid === room.me.pid) return
+    const boards = {}
+    for (const player of room.peers.values()) boards[player.pid] = (player.rows || []).map((marks) => (marks || []).map((m) => MARK_TO_WIRE[m]).join(''))
+    Net.send('sync!', {
+      pid: payload.pid, round: room.round, kind: room.kind, size: room.size,
+      answer: H.encode(H.decompose(room.answer)), ts: Date.now(), boards,
+      scores: Array.from(room.results.values()), over: room.over,
+    })
+  }
+  function onSync(payload) {
+    if (!room || payload.pid !== room.me.pid || room.startedAt) return
+    const resume = room.resume
+    const canResume = Boolean(resume?.active && Number(resume.round) === Number(payload.round))
+    beginRound(payload, !canResume)
+    if (canResume) {
+      const guesses = (resume.guesses || []).map((guess) => H.decode(String(guess)))
+      TW.restoreRoomGame(guesses, resume.status)
+      room.me.role = 'player'
+    }
+    room.resume = null
+    for (const [pid, rows] of Object.entries(payload.boards || {})) {
+      const player = room.peers.get(pid)
+      if (!player) continue
+      player.rows = rows.map((marks) => Array.from(String(marks), (n) => WIRE_TO_MARK[Number(n)] || 'absent'))
+    }
+    for (const result of payload.scores || []) room.results.set(result.pid, result)
+    renderPeers()
+    if (payload.over) showScoreboard(Array.from(room.results.values()))
+  }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-rmode],[data-rsize]')
+    if (!target || target.disabled) return
+    if (target.dataset.rmode) draft.kind = target.dataset.rmode
+    if (target.dataset.rsize !== undefined) draft.size = Number(target.dataset.rsize)
+    const parent = target.parentElement
+    for (const chip of parent.querySelectorAll('.chip')) chip.setAttribute('aria-pressed', String(chip === target))
+  })
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    if (event.target.id === 'roomJoinCode') TW.ACTIONS['room-join']()
+    else if (event.target.id === 'roomNick' && $('#roomJoinCode')?.value) TW.ACTIONS['room-join']()
+  })
+
+  Net.on('roster', onRoster)
+  Net.on('status', onStatus)
+  Net.on('start', (payload) => beginRound(payload, false))
+  Net.on('mark', onMark)
+  Net.on('done', onDone)
+  Net.on('over', onOver)
+  Net.on('sync?', onSyncRequest)
+  Net.on('sync!', onSync)
+
+  const roomButton = $('#btnRooms')
+  if (Net.available) {
+    roomButton.hidden = false
+    const resume = TW.store.get('tw.room.v1', null)
+    if (globalThis.TWRoomHash) setTimeout(() => TW.openSheet('rooms'), 0)
+    else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(
+      resume.code, resume.nick,
+      { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1 },
+      resume,
+    ), 0)
+  } else {
+    // 설정이 없을 때는 기존 홈 DOM/레이아웃까지 동일하게 유지한다.
+    roomButton.remove()
+    globalThis.TWRoomHash = null
+  }
+
+  globalThis.Room = {
+    get current() { return room },
+    localMark, localDone, leave: leaveRoom,
+    normalizeCode, repaintPeers: renderPeers,
+  }
 })()
 </script>
 </body>

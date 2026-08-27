@@ -317,6 +317,8 @@ try {
   await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.coopResult?.winnerPid && document.querySelector('.answer-reveal')?.textContent.includes(TW.state.answer)`)))
   const finalWinner = await a.evaluate(`({ pid: Room.current.coopResult.winnerPid, ranking: Room.current.coopResult.finalResults.filter((result) => result.status === 'won').sort((x, y) => x.ms - y.ms).map((result) => result.pid), name: document.querySelector('#sheetCard h2').textContent, text: document.querySelector('#sheetCard').textContent, rows: TW.state.guesses.length })`)
   if (finalWinner.pid !== cPid || finalWinner.ranking.join(',') !== [cPid, aPid].join(',') || !finalWinner.name.includes('C') || !finalWinner.text.includes('오답') || finalWinner.rows !== 5) throw new Error('협동 마지막 기회 시간 순위 처리 실패: ' + JSON.stringify(finalWinner))
+  const wrongPlayerButton = await b.evaluate(`(() => { Room.current.readyVoters = new Set(['${aPid}']); TW.openSheet('scoreboard'); return document.querySelector('[data-act=room-again]')?.textContent || '' })()`)
+  if (!wrongPlayerButton.includes('한 번 더')) throw new Error('Presence 명단에서 잠시 빠진 오답자에게 한 번 더 버튼이 보이지 않습니다: ' + wrongPlayerButton)
   ok('협동 5회 실패 → 첫 정답 뒤 전원 대기 · 정답자 제출 시간 순위')
 
   const extras = []

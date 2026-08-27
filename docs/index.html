@@ -2348,7 +2348,9 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     clearTimeout(nextTimer); room.round++; room.startedAt = null; room.over = false; TW.closeSheet(); startRound()
   }
   function rematchControls() {
-    const voters = room?.readyVoters?.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))
+    const voters = new Set(room?.readyVoters?.size ? room.readyVoters : onlinePlayers().map((p) => p.pid))
+    // 결과를 보고 있는 본인은 Presence 명단 갱신이 잠깐 늦어도 다시 하기에 참여할 수 있어야 한다.
+    if (room?.over && room.me?.pid) voters.add(room.me.pid)
     const ready = Array.from(room?.readyPids || []).filter((pid) => voters.has(pid)).length
     const total = voters.size
     const mine = room?.readyPids?.has(room.me.pid)
@@ -2364,12 +2366,16 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   function processReady(payload) {
     if (!room?.host || !room.over || payload.phase !== 'request' || Number(payload.round) !== room.round) return
     const pid = String(payload.pid || '')
-    if (!room.peers.get(pid)?.online) return
-    room.readyPids.add(pid); publishReadyState()
+    const peer = room.peers.get(pid)
+    if (!peer && !room.activePids.has(pid) && pid !== room.setterPid) return
+    // 준비 요청을 방장이 방금 받았다는 사실 자체가 이 참가자가 연결되어 있다는 증거다.
+    if (peer) peer.online = true
+    room.readyPids.add(pid); publishReadyState(pid)
   }
-  function publishReadyState() {
+  function publishReadyState(connectedPid = null) {
     if (!room?.host || !room.over) return
     const voters = onlinePlayers().map((p) => p.pid)
+    if (connectedPid && !voters.includes(connectedPid)) voters.push(connectedPid)
     room.readyPids = new Set(Array.from(room.readyPids).filter((pid) => voters.includes(pid)))
     const payload = { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters }
     Net.send('ready', payload); applyReadyState(payload)

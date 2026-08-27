@@ -322,6 +322,10 @@
   // ── 입력 ─────────────────────────────────────────────────────────────
   function press(key) {
     if (!state || busy || state.status !== 'playing') return
+    if (state.room && globalThis.Room && !globalThis.Room.canPlay()) {
+      globalThis.Room.blockedInput?.()
+      return
+    }
     if (key === BACK) { state.current.pop(); paint(); return }
     if (key === ENTER) { submit(); return }
     if (state.current.length >= state.size) return
@@ -341,7 +345,9 @@
   async function submit() {
     const guess = state.current
     if (guess.length < state.size) return reject('자모를 다 채워주세요')
-    if (!isValid(guess)) return reject('사전에 없는 단어예요')
+    // 친구가 직접 낸 문제는 내장 사전에 없을 수도 있다. 정답 그 자체만은 제출할 수 있게 한다.
+    const isAnswer = guess.join('') === state.answerJamo.join('')
+    if (!isValid(guess) && !isAnswer) return reject('사전에 없는 단어예요')
 
     // 비동기 채점기로 교체해도 같은 입력이 두 번 제출되지 않게 채점 전에 잠근다.
     busy = true
@@ -380,13 +386,42 @@
         if (state.room) globalThis.Room?.localDone(state.status, state.guesses.length)
         finish()
       }
-      const q = pending
-      pending = []
-      for (const fn of q) { try { fn() } catch (e) { /* 원격 이벤트 하나가 뒤 큐를 막지 않게 한다 */ } }
+      flushRemote()
     }, marks.length * 180 + 420)
   }
   function setJudge(next) { judge = typeof next === 'function' ? next : (guess) => H.score(guess, state.answerJamo) }
   function applyRemote(fn) { if (busy) pending.push(fn); else fn() }
+  function flushRemote() {
+    const q = pending
+    pending = []
+    for (const fn of q) { try { fn() } catch (e) { /* 원격 이벤트 하나가 뒤 큐를 막지 않게 한다 */ } }
+  }
+  // 협동 모드에서 다른 참가자가 제출한 한 줄을 같은 보드에 재생한다.
+  function applyRoomTurn(guess, marks, status, done) {
+    if (!state?.room || state.status !== 'playing' || busy) return false
+    if (!Array.isArray(guess) || guess.length !== state.size || !Array.isArray(marks) || marks.length !== state.size) return false
+    if (state.guesses.length >= MAX_TRIES) return false
+    busy = true
+    const rowIndex = state.guesses.length
+    state.guesses.push(guess.slice())
+    state.current = []
+    state.status = ['won', 'lost'].includes(status) ? status : 'playing'
+    paint(rowIndex)
+    const tiles = el.board.children[rowIndex].children
+    marks.forEach((mark, i) => {
+      setTimeout(() => {
+        tiles[i].classList.add('flip')
+        setTimeout(() => { tiles[i].classList.add(mark); tiles[i].classList.remove('filled') }, 220)
+      }, i * 180)
+    })
+    setTimeout(() => {
+      busy = false
+      paintKeyboard()
+      if (typeof done === 'function') done()
+      flushRemote()
+    }, marks.length * 180 + 420)
+    return true
+  }
   function reject(message) {
     toast(message)
     const row = el.board.children[state.guesses.length]
@@ -750,7 +785,7 @@
     get busy() { return busy },
     shareText, shareUrl, freeAnswer, resolveSize,
     SHEETS, GOES, ACTIONS, openSheet, closeSheet, toast, store, isValid, b64url,
-    MAX_TRIES, SIZES, setJudge, applyRemote,
+    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn,
     repaint: () => { if (state) paint() },
     restoreRoomGame: (guesses, status = 'playing') => {
       if (!state || !state.room) return

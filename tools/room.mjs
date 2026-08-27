@@ -171,6 +171,96 @@ try {
   })()`)
   await Promise.all([waitFor(a, `document.querySelector('.score-list') !== null`), waitFor(b, `document.querySelector('.score-list') !== null`)])
   ok('방장 강제 종료 → 두 브라우저에 순위표 표시')
+
+  async function createMode(kind, size = 4, rounds = 1) {
+    await b.evaluate(`TW.GOES.leave()`)
+    await a.evaluate(`TW.GOES.leave()`)
+    await Promise.all([waitFor(a, `!document.getElementById('home').hidden`), waitFor(b, `!document.getElementById('home').hidden`)])
+    await a.evaluate(`(() => {
+      document.querySelector('[data-go=rooms]').click()
+      document.getElementById('roomNick').value = 'A'
+      document.querySelector('[data-act=room-open-create]').click()
+      document.querySelector('[data-rmode="${kind}"]').click()
+      document.querySelector('[data-rsize="${size}"]').click()
+      ${kind === 'relay' ? `document.querySelector('[data-rounds="${rounds}"]').click()` : ''}
+      document.querySelector('[data-act=room-create]').click()
+    })()`)
+    await waitFor(a, `!document.getElementById('lobby').hidden && document.getElementById('roomCode').textContent.length === 6`)
+    const nextCode = await a.evaluate(`document.getElementById('roomCode').textContent`)
+    await b.evaluate(`(() => {
+      document.querySelector('[data-go=rooms]').click()
+      document.getElementById('roomNick').value = 'B'
+      document.getElementById('roomJoinCode').value = '${nextCode}'
+      document.querySelector('[data-act=room-join]').click()
+    })()`)
+    await waitFor(a, `document.querySelectorAll('#roomRoster li').length === 2`)
+    return nextCode
+  }
+
+  await createMode('setter', 4)
+  await waitFor(a, `Room.current?.kind === 'setter' && Net.status === 'live' && !document.querySelector('[data-act=room-start]').disabled`)
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
+  await waitFor(a, `document.getElementById('roomWord') !== null`)
+  const lenient = await a.evaluate(`(() => {
+    const input = document.getElementById('roomWord')
+    input.value = '퍄퍄'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    return { disabled: document.getElementById('roomWordButton').disabled, hint: document.getElementById('roomWordHint').textContent }
+  })()`)
+  if (lenient.disabled || !lenient.hint.includes('그래도')) throw new Error('출제 대결의 사전 경고/허용 동작이 잘못됐습니다')
+  await a.evaluate(`document.querySelector('[data-act=room-word]').click()`)
+  await Promise.all([waitFor(a, `TW.state?.mode === 'setter'`), waitFor(b, `TW.state?.mode === 'setter'`)])
+  const setterView = await a.evaluate(`({ watching: document.body.classList.contains('watching'), keyboard: document.getElementById('keyboard').hidden, banner: document.getElementById('roomBanner').textContent })`)
+  if (!setterView.watching || !setterView.keyboard || !setterView.banner.includes('퍄퍄')) throw new Error('출제자 관전 화면이 잘못됐습니다')
+  await b.evaluate(`(async () => {
+    for (const jamo of TW.state.answerJamo) TW.press(jamo)
+    await TW.submit()
+    while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
+  })()`)
+  await Promise.all([waitFor(a, `document.querySelector('.score-list') !== null`), waitFor(b, `document.querySelector('.score-list') !== null`)])
+  ok('출제 대결 → 사전 밖 단어 허용 · 출제자 관전 · 정답 제출')
+
+  await createMode('relay', 4, 3)
+  for (let round = 1; round <= 3; round++) {
+    await a.evaluate(`document.querySelector('[data-act=${round === 1 ? 'room-start' : 'room-next'}]')?.click()`)
+    await Promise.all([waitFor(a, `TW.state?.mode === 'relay' && Room.current.round === ${round} && !Room.current.over`), waitFor(b, `TW.state?.mode === 'relay' && Room.current.round === ${round} && !Room.current.over`)])
+    const winner = round === 1 ? b : a
+    await winner.evaluate(`(async () => {
+      for (const jamo of TW.state.answerJamo) TW.press(jamo)
+      await TW.submit()
+      while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
+    })()`)
+    await waitFor(a, `Room.current.results.size >= 1`)
+    await a.evaluate(`(() => { document.getElementById('btnMenu').click(); document.querySelector('[data-act=room-force]').click() })()`)
+    await Promise.all([waitFor(a, `document.querySelector('.score-list') !== null`), waitFor(b, `document.querySelector('.score-list') !== null`)])
+  }
+  await a.evaluate(`document.querySelector('[data-act=room-standings]').click()`)
+  const standings = await a.evaluate(`document.querySelector('.score-list').textContent`)
+  if (!standings.includes('10점') || !standings.includes('5점')) throw new Error('릴레이 누적 점수가 맞지 않습니다: ' + standings)
+  ok('릴레이 → 3라운드 연속 진행 · 누적 점수 · 최종 순위')
+
+  await createMode('coop', 4)
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
+  await Promise.all([waitFor(a, `TW.state?.mode === 'coop'`), waitFor(b, `TW.state?.mode === 'coop'`)])
+  await a.evaluate(`(async () => {
+    const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer)
+    for (const jamo of Hangul.decompose(word)) TW.press(jamo)
+    await TW.submit()
+    while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
+  })()`)
+  await waitFor(b, `TW.state?.guesses.length === 1 && Room.current.turnPid === Room.current.me.pid`)
+  const before = await a.evaluate(`TW.state.current.length`)
+  await a.evaluate(`TW.press('ㄱ')`)
+  const after = await a.evaluate(`TW.state.current.length`)
+  if (before !== after) throw new Error('협동 모드에서 차례가 아닌 입력이 반영됐습니다')
+  await b.evaluate(`(async () => {
+    for (const jamo of TW.state.answerJamo) TW.press(jamo)
+    await TW.submit()
+    while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
+  })()`)
+  await Promise.all([waitFor(a, `document.querySelector('.answer-reveal') !== null`), waitFor(b, `document.querySelector('.answer-reveal') !== null`)])
+  if (await a.evaluate(`TW.state.guesses.length`) !== 2) throw new Error('협동 공유 보드에 두 줄이 동기화되지 않았습니다')
+  ok('협동 → 턴 잠금 · 공유 보드 애니메이션 · 함께 정답 처리')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

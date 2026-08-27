@@ -199,31 +199,35 @@ try {
     return nextCode
   }
 
-  await createMode('setter', 4)
+  await createMode('setter', 5)
   await Promise.all([
-    waitFor(a, `Room.current?.kind === 'setter' && Room.current.setterPid === Room.current.me.pid && Net.status === 'live' && !document.querySelector('[data-act=room-start]').disabled`),
-    waitFor(b, `Net.status === 'live'`),
+    waitFor(a, `Room.current?.kind === 'setter' && document.querySelectorAll('[data-setter]').length === 2 && Net.status === 'live' && !document.querySelector('[data-act=room-start]').disabled`),
+    waitFor(b, `Room.current?.kind === 'setter' && Net.status === 'live'`),
   ])
+  const setterPid = await b.evaluate(`Room.current.me.pid`)
+  await a.evaluate(`document.querySelector('[data-setter="${setterPid}"]').click()`)
+  await waitFor(a, `Room.current.setterPid === '${setterPid}' && document.querySelector('[data-setter="${setterPid}"]').getAttribute('aria-pressed') === 'true'`)
   await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
-  await waitFor(a, `document.getElementById('roomWord') !== null`)
-  const lenient = await a.evaluate(`(() => {
+  await waitFor(b, `document.getElementById('roomWord') !== null`)
+  const preserved = await b.evaluate(`(() => {
     const input = document.getElementById('roomWord')
-    input.value = '퍄퍄'
+    input.value = '오빠'
     input.dispatchEvent(new Event('input', { bubbles: true }))
     return { disabled: document.getElementById('roomWordButton').disabled, hint: document.getElementById('roomWordHint').textContent }
   })()`)
-  if (lenient.disabled || !lenient.hint.includes('그래도')) throw new Error('출제 대결의 사전 경고/허용 동작이 잘못됐습니다')
-  await a.evaluate(`document.querySelector('[data-act=room-word]').click()`)
+  if (preserved.disabled) throw new Error('오빠를 출제할 수 없습니다: ' + JSON.stringify(preserved))
+  await b.evaluate(`document.querySelector('[data-act=room-word]').click()`)
   await Promise.all([waitFor(a, `TW.state?.mode === 'setter'`), waitFor(b, `TW.state?.mode === 'setter'`)])
-  const setterView = await a.evaluate(`({ watching: document.body.classList.contains('watching'), keyboard: document.getElementById('keyboard').hidden, banner: document.getElementById('roomBanner').textContent })`)
-  if (!setterView.watching || !setterView.keyboard || !setterView.banner.includes('퍄퍄')) throw new Error('출제자 관전 화면이 잘못됐습니다')
-  await b.evaluate(`(async () => {
+  const setterView = await b.evaluate(`({ watching: document.body.classList.contains('watching'), keyboard: document.getElementById('keyboard').hidden, banner: document.getElementById('roomBanner').textContent, answer: TW.state.answer })`)
+  const playerAnswer = await a.evaluate(`TW.state.answer`)
+  if (!setterView.watching || !setterView.keyboard || !setterView.banner.includes('오빠') || setterView.answer !== '오빠' || playerAnswer !== '오빠') throw new Error('출제자 선택 또는 오빠 원문 보존 실패: ' + JSON.stringify({ setterView, playerAnswer }))
+  await a.evaluate(`(async () => {
     for (const jamo of TW.state.answerJamo) TW.press(jamo)
     await TW.submit()
     while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
   })()`)
   await Promise.all([waitFor(a, `document.querySelector('.score-list') !== null`), waitFor(b, `document.querySelector('.score-list') !== null`)])
-  ok('출제 대결 → 사전 밖 단어 허용 · 출제자 관전 · 정답 제출')
+  ok('출제 대결 → 방장이 출제자 선택 · 오빠 원문 보존 · 출제자 관전')
 
   await createMode('relay', 4, 3)
   for (let round = 1; round <= 3; round++) {
@@ -284,6 +288,11 @@ try {
   ok('협동 3인 → 방장 확정 보드 · 한 줄씩 순환 · 턴 잠금 · 정답 공개')
 
   await a.evaluate(`document.querySelector('[data-act=room-again]').click()`)
+  await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.over && document.querySelector('#sheetCard').textContent.includes('1/3')`)))
+  await Promise.all([b, c].map((player) => player.evaluate(`document.querySelector('[data-act=room-again]').click()`)))
+  await Promise.all([a, b, c].map((player) => waitFor(player, `!Room.current.startedAt && !Room.current.over && !document.getElementById('lobby').hidden`)))
+  ok('한 번 더!! → 준비 인원 1/3 공유 · 전원 준비 후 같은 방 로비 복귀')
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
   await Promise.all([waitFor(a, `TW.state?.mode === 'coop' && TW.state.guesses.length === 0 && !Room.current.over`), waitFor(b, `TW.state?.mode === 'coop' && TW.state.guesses.length === 0 && !Room.current.over`), waitFor(c, `TW.state?.mode === 'coop' && TW.state.guesses.length === 0 && !Room.current.over`)])
   const turns = [a, b, c, a, b]
   for (let row = 0; row < turns.length; row++) {
@@ -309,6 +318,36 @@ try {
   const finalWinner = await a.evaluate(`({ pid: Room.current.coopResult.winnerPid, ranking: Room.current.coopResult.finalResults.filter((result) => result.status === 'won').sort((x, y) => x.ms - y.ms).map((result) => result.pid), name: document.querySelector('#sheetCard h2').textContent, text: document.querySelector('#sheetCard').textContent, rows: TW.state.guesses.length })`)
   if (finalWinner.pid !== cPid || finalWinner.ranking.join(',') !== [cPid, aPid].join(',') || !finalWinner.name.includes('C') || !finalWinner.text.includes('오답') || finalWinner.rows !== 5) throw new Error('협동 마지막 기회 시간 순위 처리 실패: ' + JSON.stringify(finalWinner))
   ok('협동 5회 실패 → 첫 정답 뒤 전원 대기 · 정답자 제출 시간 순위')
+
+  const extras = []
+  for (const name of ['D', 'E', 'F']) {
+    const player = await newPlayer(name, `${PAGE_URL}#r=${coopCode}`)
+    players.push(player); extras.push(player)
+    await waitFor(player, `document.getElementById('roomNick') !== null`)
+    await player.evaluate(`(() => { document.getElementById('roomNick').value = '${name}'; document.querySelector('[data-act=room-join]').click() })()`)
+  }
+  const six = [a, b, c, ...extras]
+  await waitFor(a, `Array.from(Room.current.peers.values()).filter((player) => player.online).length === 6`)
+  await Promise.all(six.map((player) => waitFor(player, `Room.current.over && document.querySelector('[data-act=room-again]') !== null`, 12000)))
+  await Promise.all(six.map((player) => player.evaluate(`document.querySelector('[data-act=room-again]').click()`)))
+  await Promise.all(six.map((player) => waitFor(player, `!Room.current.startedAt && !Room.current.over && !document.getElementById('lobby').hidden`, 12000)))
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
+  await Promise.all(six.map((player) => waitFor(player, `TW.state?.mode === 'coop' && Room.current.maxTries === 6 && document.querySelectorAll('#board .row').length === 6`, 12000)))
+  const pagesByPid = new Map()
+  for (const player of six) pagesByPid.set(await player.evaluate(`Room.current.me.pid`), player)
+  for (let row = 0; row < 6; row++) {
+    const turnPid = await a.evaluate(`Room.current.turnPid`)
+    const player = pagesByPid.get(turnPid)
+    if (!player) throw new Error('6인 협동 차례 참가자를 찾지 못했습니다: ' + turnPid)
+    await player.evaluate(`(async () => {
+      const word = Words.answers[TW.state.size].find((candidate) => Hangul.encode(Hangul.decompose(candidate)) !== Hangul.encode(TW.state.answerJamo))
+      for (const jamo of Hangul.decompose(word)) TW.press(jamo)
+      await TW.submit()
+    })()`)
+    await Promise.all(six.map((page) => waitFor(page, `TW.state?.guesses.length === ${row + 1} && !TW.busy`, 12000)))
+  }
+  await Promise.all(six.map((player) => waitFor(player, `Room.current.finalChance?.active && TW.state.guesses.length === 6`, 12000)))
+  ok('협동 6인 → 공유 보드 6줄 · 전원 최소 한 번씩 차례 보장')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

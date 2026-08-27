@@ -105,9 +105,8 @@ h1, h2, h3, p { margin: 0; }
 .roster li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--correct); }
 .roster li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .roster li span { margin-left: auto; color: var(--ink-dim); font-size: 12px; }
-.roster li[data-setter] { cursor: pointer; border-radius: 8px; padding: 0 8px; }
-.roster li[data-setter][aria-pressed="true"] { background: rgba(156,221,153,.12); }
-.roster li[data-setter][aria-pressed="true"] span { color: var(--correct); font-weight: 700; }
+.setter-pick { flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 9px; color: var(--ink-dim); font-size: 11px; }
+.setter-pick[aria-pressed="true"] { border-color: var(--correct); background: rgba(156,221,153,.12); color: var(--correct); font-weight: 700; }
 .lobby-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 22px; }
 .lobby-actions .muted { line-height: 1.5; }
 .room-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 10px 0 18px; }
@@ -573,7 +572,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   'use strict'
 
   const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ'
-  const APP_EVENTS = ['lobby', 'pick', 'start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn', 'chat', 'wait']
+  const APP_EVENTS = ['lobby', 'pick', 'start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn', 'chat', 'wait', 'ready']
 
   function encodeFrame(frame) { return JSON.stringify(frame) }
   function decodeFrame(text) {
@@ -953,10 +952,11 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   const isValid = (jamo) => W.validSet(jamo.length).has(H.encode(jamo))
 
   // locked = 잠금 링크로 들어온 경우. 그 문제 하나만 풀 수 있고 나머지 화면은 감춘다.
-  function startGame(mode, size, word, locked) {
+  function startGame(mode, size, word, locked, maxTries) {
     const answer = word || (mode === 'daily' ? dailyAnswer(kstToday(), size) : freeAnswer(size))
     state = {
       mode, size, answer, locked: Boolean(locked),
+      maxTries: Math.max(MAX_TRIES, Math.floor(Number(maxTries) || MAX_TRIES)),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
       date: kstToday(), room: globalThis.Room?.current?.code || null,
@@ -1035,7 +1035,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     el.title.textContent = MODE_LABEL[state.mode]
     el.sub.textContent = state.mode === 'daily'
       ? `${state.date} · ${state.size}칸`
-      : `${state.size}칸 · ${MAX_TRIES}번 안에`
+      : `${state.size}칸 · ${state.maxTries}번 안에`
     buildBoard()
     buildKeyboard()
     fitBoard()
@@ -1053,7 +1053,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   function buildBoard() {
     el.board.style.setProperty('--cols', state.size)
     el.board.innerHTML = ''
-    for (let r = 0; r < MAX_TRIES; r++) {
+    for (let r = 0; r < state.maxTries; r++) {
       const row = document.createElement('div')
       row.className = 'row'
       for (let c = 0; c < state.size; c++) row.appendChild(document.createElement('div')).className = 'tile'
@@ -1077,7 +1077,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const tile = Math.max(TILE_MIN, Math.min(
       TILE_MAX,
       (availWidth - GAP * (state.size - 1)) / state.size,
-      (availHeight - GAP * (MAX_TRIES - 1)) / MAX_TRIES,
+      (availHeight - GAP * (state.maxTries - 1)) / state.maxTries,
     ))
     el.board.style.width = Math.floor(tile * state.size + GAP * (state.size - 1)) + 'px'
   }
@@ -1115,7 +1115,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       }
     })
     const r = state.guesses.length
-    if (r < MAX_TRIES) {
+    if (r < state.maxTries) {
       const tiles = el.board.children[r].children
       for (let c = 0; c < state.size; c++) {
         tiles[c].textContent = state.current[c] || ''
@@ -1191,7 +1191,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
 
     const won = marks.every((m) => m === 'correct')
     if (won) state.status = 'won'
-    else if (state.guesses.length >= MAX_TRIES) state.status = 'lost'
+    else if (state.guesses.length >= state.maxTries) state.status = 'lost'
     if (state.room) globalThis.Room?.localMark(rowIndex, marks)
 
     const tiles = el.board.children[rowIndex].children
@@ -1224,7 +1224,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   function applyRoomTurn(guess, marks, status, done) {
     if (!state?.room || state.status !== 'playing' || busy) return false
     if (!Array.isArray(guess) || guess.length !== state.size || !Array.isArray(marks) || marks.length !== state.size) return false
-    if (state.guesses.length >= MAX_TRIES) return false
+    if (state.guesses.length >= state.maxTries) return false
     busy = true
     const rowIndex = state.guesses.length
     state.guesses.push(guess.slice())
@@ -1280,7 +1280,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       .join('\n')
   }
   function shareText() {
-    const score = state.status === 'won' ? `${state.guesses.length}/${MAX_TRIES}` : `X/${MAX_TRIES}`
+    const score = state.status === 'won' ? `${state.guesses.length}/${state.maxTries}` : `X/${state.maxTries}`
     const head = state.mode === 'daily'
       ? `오늘의 단어 ${state.size}칸 · ${state.date} · ${score}`
       : `${MODE_LABEL[state.mode]} ${state.size}칸 · ${score}`
@@ -1739,8 +1739,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     enterRoom(code, nick, { kind: 'versus', size: 5, roundsTotal: 1 })
   }
   Object.assign(TW.ACTIONS, {
-    'room-start': startRound, 'room-next': nextRound, 'room-again': playAgain,
-    'room-standings': () => TW.openSheet('standings'), 'room-force': forceRound,
+    'room-start': startRound, 'room-next': nextRound, 'room-again': requestRematch,
+    'room-standings': showStandings, 'room-force': forceRound,
     'room-copy': () => TW.copyAndTell(inviteText(), TW.shareUrl() ? '초대 링크를 복사했어요' : '방 코드를 복사했어요'),
     'room-copy-result': copyResult, 'room-word': submitSetterWord, 'room-final-submit': submitFinalWord,
   })
@@ -1767,11 +1767,16 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const names = displayNames()
     const choose = room.host && room.kind === 'setter' && !room.startedAt
     $('#roomCount').textContent = `${list.length}명`
-    $('#roomRoster').innerHTML = list.map((p) => `<li ${choose ? `data-setter="${esc(p.pid)}" aria-pressed="${p.pid === room.setterPid}"` : ''}><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b><span>${room.kind === 'setter' && p.pid === room.setterPid ? '출제자' : p.pid === room.hostPid ? '방장' : '참가자'}</span></li>`).join('')
+    $('#roomRoster').innerHTML = list.map((p) => {
+      const selected = p.pid === room.setterPid
+      const role = room.kind === 'setter' && selected ? '출제자' : p.pid === room.hostPid ? '방장' : '참가자'
+      const pick = choose ? `<button class="setter-pick" data-setter="${esc(p.pid)}" aria-pressed="${selected}">${selected ? '선택됨' : '출제자로 선택'}</button>` : ''
+      return `<li><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b><span>${role}</span>${pick}</li>`
+    }).join('')
     const wait = room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
     const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : ''}${wait}`
     $('#lobbyActions').innerHTML = room.host
-      ? `<p class="muted">${detail}${choose ? '<br>이름을 눌러 출제자를 바꿀 수 있어요.' : ''}</p><button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
+      ? `<p class="muted">${detail}${choose ? '<br>아래에서 출제자를 선택한 뒤 시작하세요.' : ''}</p><button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
       : `<p class="muted">${detail}<br>방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
     $('#lobbyStatus').textContent = ({ off: '오프라인', connecting: '연결하는 중…', live: '연결됨', retry: '다시 연결하는 중…', down: '연결을 기다리는 중…' })[Net.status] || Net.status
   }
@@ -1788,7 +1793,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       activePids: new Set(), participants: [], results: new Map(), totals: new Map(Object.entries(resume?.totals || {})),
       startedAt: null, answer: null, over: false, final: false, scoreResults: [],
       setterPid: resume?.setterPid || me.pid, turnPid: resume?.turnPid || null, pick: null, resume: resume || null,
-      waitEndsAt: null, coopPending: false, finalChance: null,
+      waitEndsAt: null, coopPending: false, finalChance: null, maxTries: TW.MAX_TRIES,
+      readyPids: new Set(), readyVoters: new Set(), resultSheet: 'scoreboard',
     }
     globalThis.TWRoomHash = null
     persistRoom(); showLobby()
@@ -1830,7 +1836,10 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     room.hostPid = Net.electHost(roster); room.host = room.hostPid === room.me.pid
     if (!room.setterPid || !room.peers.get(room.setterPid)?.online) room.setterPid = room.hostPid
     renderLobby(); renderPeers(); renderBanner()
-    if (!room.startedAt) broadcastLobby()
+    if (!room.startedAt) {
+      if (room.host) broadcastLobby()
+      else if (Net.status === 'live') Net.send('sync?', { pid: room.me.pid })
+    }
     if (room.kind === 'coop' && room.startedAt && !room.over) scheduleTurnSkip()
     if (room.host && room.finalChance?.active && !room.over) {
       clearTimeout(finalTimer)
@@ -1840,6 +1849,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       clearTimeout(waitTimer)
       waitTimer = setTimeout(forceRound, Math.max(0, room.waitEndsAt - Date.now()))
     }
+    if (room.host && room.over) publishReadyState()
   }
   function onStatus(status) {
     renderLobby()
@@ -1864,18 +1874,19 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (!room?.host) return
     const participants = roundParticipants(setterPid)
     if (!participants.length) return TW.toast('플레이할 참가자가 없어요')
+    const maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, participants.length) : TW.MAX_TRIES
     const payload = {
       round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size,
-      answer: H.encode(H.decompose(answer)), setter: setterPid, participants,
+      answer: H.encode(H.decompose(answer)), word: answer, setter: setterPid, participants, maxTries,
       turnPid: room.kind === 'coop' ? participants[0] : null, waitSeconds: room.waitSeconds, ts: Date.now(),
     }
     Net.send('start', payload); beginRound(payload, false)
   }
   function onPick(payload) {
-    if (!room || room.startedAt || room.kind !== 'setter') return
+    if (!room || room.startedAt) return
     const size = Number(payload.size)
     if (Number(payload.round) !== room.round || !TW.SIZES.includes(size)) return
-    room.pick = { round: room.round, setterPid: String(payload.setterPid), size }; room.setterPid = room.pick.setterPid
+    room.kind = 'setter'; room.pick = { round: room.round, setterPid: String(payload.setterPid), size }; room.setterPid = room.pick.setterPid
     if (room.me.pid === room.setterPid) TW.openSheet('pickword')
     else TW.toast(`${playerName(room.setterPid)}님이 문제를 고르는 중이에요`, 2200)
   }
@@ -1897,19 +1908,23 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (!room?.pick || room.me.pid !== room.pick.setterPid) return
     const word = readSetterWord()
     if (!word.validLength) return paintSetterWord()
-    const payload = { pid: room.me.pid, round: room.pick.round, answer: H.encode(word.jamo), size: word.size }
+    const payload = { pid: room.me.pid, round: room.pick.round, answer: H.encode(word.jamo), word: word.raw, size: word.size }
     TW.closeSheet()
     if (room.host) onWord(payload); else Net.send('word', payload)
   }
   function onWord(payload) {
     if (!room?.host || !room.pick || room.kind !== 'setter') return
     if (String(payload.pid) !== room.pick.setterPid || Number(payload.round) !== room.pick.round) return
-    const answer = decodeAnswer(payload.answer)
+    const answer = decodeWireWord(payload)
     if (!answer || Array.from(H.decompose(answer) || '').length !== room.pick.size) return
     const pick = room.pick; room.pick = null; sendStart(answer, pick.setterPid, pick.size)
   }
   function decodeAnswer(value) {
     try { return H.compose(H.decode(String(value || ''))) } catch (e) { return null }
+  }
+  function decodeWireWord(payload) {
+    const word = String(payload?.word || '')
+    return H.decompose(word) ? word : decodeAnswer(payload?.answer)
   }
   function validParticipants(payload) {
     const raw = Array.isArray(payload.participants) ? payload.participants.map(String) : []
@@ -1918,7 +1933,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   }
   function beginRound(payload, spectator) {
     if (!room || Number(payload.round) < room.round) return
-    const answer = decodeAnswer(payload.answer); const size = Number(payload.size)
+    const answer = decodeWireWord(payload); const size = Number(payload.size)
     if (!answer || !TW.SIZES.includes(size) || !Object.hasOwn(MODES, payload.kind)) return
     room.round = Number(payload.round) || 1; room.roundsTotal = Math.max(1, Number(payload.roundsTotal) || room.roundsTotal || 1)
     room.kind = payload.kind; room.size = size; room.answer = answer
@@ -1926,14 +1941,16 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     room.setterPid = payload.setter ? String(payload.setter) : null
     room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
     room.turnPid = room.kind === 'coop' ? String(payload.turnPid || room.participants[0] || '') : null
+    room.maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, Number(payload.maxTries) || room.participants.length) : TW.MAX_TRIES
     room.startedAt = Date.now(); room.over = false; room.final = false; room.results = new Map(); room.scoreResults = []
-    room.waitEndsAt = null; room.coopPending = false; room.finalChance = null; clearTimeout(waitTimer); clearTimeout(finalTimer)
+    room.waitEndsAt = null; room.coopPending = false; room.finalChance = null
+    room.readyPids = new Set(); room.readyVoters = new Set(); room.resultSheet = 'scoreboard'; clearTimeout(waitTimer); clearTimeout(finalTimer)
     for (const p of room.peers.values()) {
       p.rows = []; p.status = room.activePids.has(p.pid) ? 'playing' : p.pid === room.setterPid ? 'setter' : 'spectator'; p.tries = null; p.ms = null
     }
     const isSetter = room.me.pid === room.setterPid; const isActive = room.activePids.has(room.me.pid)
     room.me.role = isSetter ? 'setter' : spectator || !isActive ? 'spectator' : 'player'
-    TW.startGame(room.kind, room.size, answer)
+    TW.startGame(room.kind, room.size, answer, false, room.maxTries)
     $('#btnBack').dataset.go = 'leave'; $('#btnMenu').dataset.sheet = 'roommenu'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '방 메뉴')
     const watching = room.me.role !== 'player'
     document.body.classList.toggle('watching', watching); $('#keyboard').hidden = watching; $('.board-wrap').hidden = watching
@@ -2081,7 +2098,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (guess.length !== room.size) return
     const marks = H.score(guess, TW.state.answerJamo)
     const won = marks.every((mark) => mark === 'correct')
-    const needsFinalChance = !won && row + 1 >= TW.MAX_TRIES
+    const needsFinalChance = !won && row + 1 >= room.maxTries
     const status = won ? 'won' : 'playing'
     const commit = {
       phase: 'commit', pid, row, guess: H.encode(guess), marks: encodeMarks(marks), status,
@@ -2248,7 +2265,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const byPid = room.finalChance.results
     const finalResults = room.participants.filter((pid) => room.activePids.has(pid)).map((pid) => byPid.get(pid) || { pid, status: 'timeout', ms: null })
     const winners = finalResults.filter((result) => result.status === 'won').sort((a, b) => a.ms - b.ms || room.participants.indexOf(a.pid) - room.participants.indexOf(b.pid))
-    finishCoop(winners.length ? 'won' : 'lost', TW.MAX_TRIES, winners[0]?.pid || null, true, finalResults)
+    finishCoop(winners.length ? 'won' : 'lost', room.maxTries, winners[0]?.pid || null, true, finalResults)
   }
   function finishCoop(status, tries, winnerPid = null, fromFinalChance = false, finalResults = []) {
     if (!room?.host || room.over) return
@@ -2256,7 +2273,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (room.finalChance) room.finalChance.active = false
     const payload = {
       round: room.round, coop: true, status: status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(tries) || 0),
-      answer: H.encode(H.decompose(room.answer)), winnerPid: winnerPid ? String(winnerPid) : null, finalChance: Boolean(fromFinalChance),
+      answer: H.encode(H.decompose(room.answer)), word: room.answer, winnerPid: winnerPid ? String(winnerPid) : null, finalChance: Boolean(fromFinalChance),
       finalResults: Array.isArray(finalResults) ? finalResults.map((result) => ({ pid: String(result.pid), status: ['won', 'lost', 'timeout'].includes(result.status) ? result.status : 'lost', ms: result.ms === null ? null : Math.max(0, Number(result.ms) || 0) })) : [],
     }
     Net.send('over', payload); TW.applyRemote(() => showCoopResult(payload))
@@ -2274,7 +2291,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   function showScoreboard(results, final) {
     if (!room) return
     clearInterval(timer); clearTimeout(nextTimer); clearTimeout(waitTimer)
-    room.over = true; room.final = Boolean(final); room.scoreResults = sortedResults(results)
+    room.over = true; room.final = Boolean(final); room.scoreResults = sortedResults(results); room.resultSheet = 'scoreboard'
     room.waitEndsAt = null; $('#quickChat').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
     if (room.kind === 'relay' && !room.final && room.host) nextTimer = setTimeout(nextRound, 10000)
@@ -2289,7 +2306,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       seen.add(pid)
       return [{ pid, status: ['won', 'lost', 'timeout'].includes(result.status) ? result.status : 'lost', ms: result.ms === null ? null : Math.max(0, Number(result.ms) || 0) }]
     })
-    room.over = true; room.coopResult = { status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(payload.tries) || 0), winnerPid: payload.winnerPid ? String(payload.winnerPid) : null, finalChance: Boolean(payload.finalChance), finalResults }
+    room.over = true; room.resultSheet = 'scoreboard'; room.coopResult = { status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(payload.tries) || 0), winnerPid: payload.winnerPid ? String(payload.winnerPid) : null, finalChance: Boolean(payload.finalChance), finalResults }
     if (room.finalChance) room.finalChance.active = false
     room.turnPid = null; room.coopPending = false; $('#quickChat').hidden = true; $('#finalChance').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
@@ -2304,40 +2321,87 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       const winnerCount = finalResults.filter((result) => result.status === 'won').length
       const soloWin = finalResults.length === 1 && winnerCount === 1
       const title = soloWin ? '마지막 기회 성공!' : winner ? `${esc(winner)}님 1위!` : won ? '함께 맞혔어요!' : '이번에는 아쉬워요'
-      const detail = soloWin ? '마지막 기회에서 정답을 맞혔어요' : winner ? `정답자 ${winnerCount}명 · 빠른 순서` : won ? `${room.coopResult.tries}/${TW.MAX_TRIES}번 만에 성공` : `정답 · ${room.size}칸`
+      const detail = soloWin ? '마지막 기회에서 정답을 맞혔어요' : winner ? `정답자 ${winnerCount}명 · 빠른 순서` : won ? `${room.coopResult.tries}/${room.maxTries}번 만에 성공` : `정답 · ${room.size}칸`
       let rank = 0
       const ranking = room.coopResult?.finalChance ? `<ol class="score-list">${finalResults.map((result) => {
         const place = result.status === 'won' ? ++rank : '—'
         const outcome = result.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초` : result.status === 'timeout' ? '미제출' : '오답'
         return `<li><strong>${place}</strong><b>${esc(playerName(result.pid))}${result.pid === room.me.pid ? ' (나)' : ''}</b><span>${outcome}</span></li>`
       }).join('')}</ol>` : ''
-      return `<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${detail}</span></div>${ranking}<div class="sheet-actions">${room.host ? '<button class="btn primary" data-act="room-again">한 판 더</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
+      return `<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${detail}</span></div>${ranking}<div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     const names = displayNames(); const relay = room.kind === 'relay'
     return `<h2>${relay ? `${room.round}/${room.roundsTotal} 라운드 결과` : '대결 결과'}</h2>
       <div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.size}칸</span></div>
       <ol class="score-list">${room.scoreResults.map((r, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(r.pid) || '나간 참가자')}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>`).join('')}</ol>
-      <div class="sheet-actions">${relay && room.final ? '<button class="btn primary" data-act="room-standings">최종 순위 보기</button>' : relay && room.host ? '<button class="btn primary" data-act="room-next">다음 라운드</button>' : relay ? '<p class="muted">방장이 다음 라운드를 시작하기를 기다리는 중…</p>' : ''}<button class="btn accent" data-act="room-copy-result">결과 복사하기</button><button class="btn ghost" data-go="leave">나가기</button></div>`
+      <div class="sheet-actions">${relay && room.final ? '<button class="btn primary" data-act="room-standings">최종 순위 보기</button>' : relay && room.host ? '<button class="btn primary" data-act="room-next">다음 라운드</button>' : relay ? '<p class="muted">방장이 다음 라운드를 시작하기를 기다리는 중…</p>' : rematchControls()}<button class="btn accent" data-act="room-copy-result">결과 복사하기</button><button class="btn ghost" data-go="leave">나가기</button></div>`
   }
   TW.SHEETS.standings = () => {
     if (!room) return '<h2>순위를 찾지 못했어요</h2>'
     const names = displayNames()
     const list = Array.from(room.totals, ([pid, points]) => ({ pid, points: Number(points) || 0 })).sort((a, b) => b.points - a.points || (names.get(a.pid) || '').localeCompare(names.get(b.pid) || ''))
-    return `<h2>최종 순위</h2><ol class="score-list">${list.map((e, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(e.pid) || '나간 참가자')}</b><span>${e.points}점</span></li>`).join('')}</ol><div class="sheet-actions">${room.host ? '<button class="btn primary" data-act="room-again">한 판 더</button>' : '<p class="muted">방장이 다음 게임을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
+    return `<h2>최종 순위</h2><ol class="score-list">${list.map((e, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(e.pid) || '나간 참가자')}</b><span>${e.points}점</span></li>`).join('')}</ol><div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
   }
+  function showStandings() { if (room) { room.resultSheet = 'standings'; TW.openSheet('standings') } }
   function nextRound() {
     if (!room?.host || room.kind !== 'relay' || room.round >= room.roundsTotal) return
     clearTimeout(nextTimer); room.round++; room.startedAt = null; room.over = false; TW.closeSheet(); startRound()
   }
-  function playAgain() {
-    if (!room?.host) return
-    clearTimeout(nextTimer); room.round = 1; room.totals = new Map(); room.startedAt = null; room.over = false; room.final = false
-    TW.closeSheet(); startRound()
+  function rematchControls() {
+    const voters = room?.readyVoters?.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))
+    const ready = Array.from(room?.readyPids || []).filter((pid) => voters.has(pid)).length
+    const total = voters.size
+    const mine = room?.readyPids?.has(room.me.pid)
+    if (!total || !voters.has(room.me.pid)) return `<p class="muted">다시 하기 준비 ${ready}/${total}</p>`
+    return `<p class="muted">다시 하기 준비 <b>${ready}/${total}</b></p><button class="btn primary" data-act="room-again" ${mine ? 'disabled' : ''}>${mine ? `기다리는 중… (${ready}/${total})` : `한 번 더!! (${ready}/${total})`}</button>`
+  }
+  function requestRematch() {
+    if (!room?.over || room.readyPids.has(room.me.pid)) return
+    const payload = { phase: 'request', round: room.round, pid: room.me.pid }
+    if (room.host) processReady(payload)
+    else Net.send('ready', payload)
+  }
+  function processReady(payload) {
+    if (!room?.host || !room.over || payload.phase !== 'request' || Number(payload.round) !== room.round) return
+    const pid = String(payload.pid || '')
+    if (!room.peers.get(pid)?.online) return
+    room.readyPids.add(pid); publishReadyState()
+  }
+  function publishReadyState() {
+    if (!room?.host || !room.over) return
+    const voters = onlinePlayers().map((p) => p.pid)
+    room.readyPids = new Set(Array.from(room.readyPids).filter((pid) => voters.includes(pid)))
+    const payload = { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters }
+    Net.send('ready', payload); applyReadyState(payload)
+    if (voters.length && voters.every((pid) => room.readyPids.has(pid))) {
+      const lobby = { phase: 'lobby', round: room.round }
+      Net.send('ready', lobby); returnToLobby(lobby)
+    }
+  }
+  function applyReadyState(payload) {
+    if (!room?.over || payload.phase !== 'state' || Number(payload.round) !== room.round) return
+    room.readyPids = new Set(Array.isArray(payload.ready) ? payload.ready.map(String) : [])
+    room.readyVoters = new Set(Array.isArray(payload.voters) ? payload.voters.map(String) : [])
+    TW.openSheet(room.resultSheet || 'scoreboard')
+  }
+  function returnToLobby(payload) {
+    if (!room || !room.over || payload.phase !== 'lobby' || Number(payload.round) !== room.round) return
+    clearTimeout(nextTimer); clearTimeout(waitTimer); clearTimeout(finalTimer); clearTimeout(skipTimer)
+    room.round = 1; room.totals = new Map(); room.startedAt = null; room.answer = null; room.over = false; room.final = false
+    room.results = new Map(); room.scoreResults = []; room.coopResult = null; room.finalChance = null; room.readyPids = new Set(); room.readyVoters = new Set()
+    room.participants = []; room.activePids = new Set(); room.turnPid = null; room.pick = null; room.me.role = 'player'
+    document.body.classList.remove('watching'); showLobby(); persistRoom(); broadcastLobby()
+  }
+  function onReady(payload) {
+    if (!room) return
+    if (payload.phase === 'request') return processReady(payload)
+    if (payload.phase === 'state') return applyReadyState(payload)
+    if (payload.phase === 'lobby') return returnToLobby(payload)
   }
   function copyResult() {
     if (!room) return
     if (room.kind === 'coop') {
-      const score = room.coopResult?.status === 'won' ? `${room.coopResult.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`
+      const score = room.coopResult?.status === 'won' ? `${room.coopResult.tries}/${room.maxTries}` : `X/${room.maxTries}`
       const finalRanks = (room.coopResult?.finalResults || []).filter((result) => result.status === 'won').sort((a, b) => a.ms - b.ms).map((result, i) => `${i + 1}. ${playerName(result.pid)} · ${(result.ms / 1000).toFixed(1)}초`)
       return TW.copyAndTell([`오늘의 단어 협동 · ${room.size}칸 · ${score}`, ...finalRanks, `정답 ${room.answer}`, inviteText()].filter(Boolean).join('\n'), '협동 결과를 복사했어요')
     }
@@ -2357,22 +2421,25 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     }).join('')
   }
   function onSyncRequest(payload) {
-    if (!room?.host || !room.startedAt || payload.pid === room.me.pid) return
+    if (!room?.host || payload.pid === room.me.pid) return
+    if (!room.startedAt) { broadcastLobby(); return }
     const boards = {}
     for (const p of room.peers.values()) boards[p.pid] = (p.rows || []).map((marks) => encodeMarks(marks || []))
     Net.send('sync!', {
       pid: payload.pid, round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size: room.size,
-      answer: H.encode(H.decompose(room.answer)), ts: Date.now(), setter: room.setterPid,
-      participants: room.participants, turnPid: room.turnPid, boards, waitSeconds: room.waitSeconds,
+      answer: H.encode(H.decompose(room.answer)), word: room.answer, ts: Date.now(), setter: room.setterPid,
+      participants: room.participants, turnPid: room.turnPid, boards, waitSeconds: room.waitSeconds, maxTries: room.maxTries,
       waitRemaining: room.waitEndsAt ? Math.max(1, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : 0,
       guesses: room.kind === 'coop' ? (TW.state?.guesses || []).map((g) => H.encode(g)) : [],
       scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult,
+      readyState: room.over ? { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters: Array.from(room.readyVoters.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))) } : null,
       finalChanceState: room.finalChance?.active ? { seconds: Math.max(1, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)), elapsedMs: Math.max(0, Date.now() - room.finalChance.startedAt), results: Array.from(room.finalChance.results.values()) } : null,
     })
   }
   function onSync(payload) {
     if (!room || payload.pid !== room.me.pid) return
     if (room.startedAt) {
+      if (room.over) { if (payload.readyState) applyReadyState(payload.readyState); return }
       if (room.kind !== 'coop' || Number(payload.round) !== room.round) return
       TW.applyRemote(() => {
         room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
@@ -2403,6 +2470,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (Number(payload.waitRemaining) > 0) beginWait({ round: room.round, seconds: Number(payload.waitRemaining) })
     if (payload.finalChanceState) beginFinalChance({ phase: 'final-start', round: room.round, ...payload.finalChanceState })
     if (payload.over) room.kind === 'coop' ? showCoopResult(payload.coopResult || payload) : showScoreboard(Array.from(room.results.values()), Boolean(payload.final))
+    if (payload.readyState) applyReadyState(payload.readyState)
   }
 
   document.addEventListener('click', (event) => {
@@ -2438,7 +2506,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   })
   Net.on('roster', onRoster); Net.on('status', onStatus); Net.on('lobby', onLobby); Net.on('pick', onPick); Net.on('word', onWord)
   Net.on('start', (payload) => beginRound(payload, false)); Net.on('mark', onMark); Net.on('done', onDone); Net.on('turn', onTurn)
-  Net.on('chat', onChat); Net.on('wait', beginWait)
+  Net.on('chat', onChat); Net.on('wait', beginWait); Net.on('ready', onReady)
   Net.on('over', onOver); Net.on('sync?', onSyncRequest); Net.on('sync!', onSync)
 
   const roomButton = $('#btnRooms')

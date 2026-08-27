@@ -8,7 +8,7 @@
   'use strict'
 
   const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ'
-  const APP_EVENTS = ['lobby', 'pick', 'start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn', 'chat', 'wait']
+  const APP_EVENTS = ['lobby', 'pick', 'start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn', 'chat', 'wait', 'ready']
 
   function encodeFrame(frame) { return JSON.stringify(frame) }
   function decodeFrame(text) {

@@ -132,10 +132,11 @@
   const isValid = (jamo) => W.validSet(jamo.length).has(H.encode(jamo))
 
   // locked = 잠금 링크로 들어온 경우. 그 문제 하나만 풀 수 있고 나머지 화면은 감춘다.
-  function startGame(mode, size, word, locked) {
+  function startGame(mode, size, word, locked, maxTries) {
     const answer = word || (mode === 'daily' ? dailyAnswer(kstToday(), size) : freeAnswer(size))
     state = {
       mode, size, answer, locked: Boolean(locked),
+      maxTries: Math.max(MAX_TRIES, Math.floor(Number(maxTries) || MAX_TRIES)),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
       date: kstToday(), room: globalThis.Room?.current?.code || null,
@@ -214,7 +215,7 @@
     el.title.textContent = MODE_LABEL[state.mode]
     el.sub.textContent = state.mode === 'daily'
       ? `${state.date} · ${state.size}칸`
-      : `${state.size}칸 · ${MAX_TRIES}번 안에`
+      : `${state.size}칸 · ${state.maxTries}번 안에`
     buildBoard()
     buildKeyboard()
     fitBoard()
@@ -232,7 +233,7 @@
   function buildBoard() {
     el.board.style.setProperty('--cols', state.size)
     el.board.innerHTML = ''
-    for (let r = 0; r < MAX_TRIES; r++) {
+    for (let r = 0; r < state.maxTries; r++) {
       const row = document.createElement('div')
       row.className = 'row'
       for (let c = 0; c < state.size; c++) row.appendChild(document.createElement('div')).className = 'tile'
@@ -256,7 +257,7 @@
     const tile = Math.max(TILE_MIN, Math.min(
       TILE_MAX,
       (availWidth - GAP * (state.size - 1)) / state.size,
-      (availHeight - GAP * (MAX_TRIES - 1)) / MAX_TRIES,
+      (availHeight - GAP * (state.maxTries - 1)) / state.maxTries,
     ))
     el.board.style.width = Math.floor(tile * state.size + GAP * (state.size - 1)) + 'px'
   }
@@ -294,7 +295,7 @@
       }
     })
     const r = state.guesses.length
-    if (r < MAX_TRIES) {
+    if (r < state.maxTries) {
       const tiles = el.board.children[r].children
       for (let c = 0; c < state.size; c++) {
         tiles[c].textContent = state.current[c] || ''
@@ -370,7 +371,7 @@
 
     const won = marks.every((m) => m === 'correct')
     if (won) state.status = 'won'
-    else if (state.guesses.length >= MAX_TRIES) state.status = 'lost'
+    else if (state.guesses.length >= state.maxTries) state.status = 'lost'
     if (state.room) globalThis.Room?.localMark(rowIndex, marks)
 
     const tiles = el.board.children[rowIndex].children
@@ -403,7 +404,7 @@
   function applyRoomTurn(guess, marks, status, done) {
     if (!state?.room || state.status !== 'playing' || busy) return false
     if (!Array.isArray(guess) || guess.length !== state.size || !Array.isArray(marks) || marks.length !== state.size) return false
-    if (state.guesses.length >= MAX_TRIES) return false
+    if (state.guesses.length >= state.maxTries) return false
     busy = true
     const rowIndex = state.guesses.length
     state.guesses.push(guess.slice())
@@ -459,7 +460,7 @@
       .join('\n')
   }
   function shareText() {
-    const score = state.status === 'won' ? `${state.guesses.length}/${MAX_TRIES}` : `X/${MAX_TRIES}`
+    const score = state.status === 'won' ? `${state.guesses.length}/${state.maxTries}` : `X/${state.maxTries}`
     const head = state.mode === 'daily'
       ? `오늘의 단어 ${state.size}칸 · ${state.date} · ${score}`
       : `${MODE_LABEL[state.mode]} ${state.size}칸 · ${score}`

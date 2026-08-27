@@ -202,7 +202,7 @@
     if (room.kind === 'coop' && room.startedAt && !room.over) scheduleTurnSkip()
     if (room.host && room.finalChance?.active && !room.over) {
       clearTimeout(finalTimer)
-      finalTimer = setTimeout(() => finishCoop('lost', TW.MAX_TRIES, null, true), Math.max(0, room.finalChance.endsAt - Date.now()))
+      finalTimer = setTimeout(finishFinalChance, Math.max(0, room.finalChance.endsAt - Date.now()))
     }
     if (room.host && room.waitEndsAt && !room.over) {
       clearTimeout(waitTimer)
@@ -481,21 +481,31 @@
   }
   function startFinalChance() {
     if (!room?.host || room.over || room.finalChance?.active) return
-    const payload = { phase: 'final-start', round: room.round, seconds: 30, submitted: [] }
+    const payload = { phase: 'final-start', round: room.round, seconds: 30, elapsedMs: 0, results: [] }
     Net.send('turn', payload); beginFinalChance(payload)
   }
   function beginFinalChance(payload) {
     if (!room || room.kind !== 'coop' || room.over || Number(payload.round) !== room.round) return
     const seconds = Math.max(1, Math.min(60, Number(payload.seconds) || 30))
+    const elapsedMs = Math.max(0, Number(payload.elapsedMs) || 0)
+    const results = new Map()
+    for (const item of Array.isArray(payload.results) ? payload.results : []) {
+      const pid = String(item?.pid || '')
+      if (!room.activePids.has(pid) || results.has(pid)) continue
+      results.set(pid, { pid, status: item.status === 'won' ? 'won' : 'lost', ms: Math.max(0, Number(item.ms) || 0) })
+    }
+    for (const pid of Array.isArray(payload.submitted) ? payload.submitted.map(String) : []) {
+      if (room.activePids.has(pid) && !results.has(pid)) results.set(pid, { pid, status: 'lost', ms: elapsedMs })
+    }
     room.turnPid = null; room.coopPending = false
     room.finalChance = {
-      active: true, endsAt: Date.now() + seconds * 1000,
-      submitted: new Set(Array.isArray(payload.submitted) ? payload.submitted.map(String) : []),
+      active: true, startedAt: Date.now() - elapsedMs, endsAt: Date.now() + seconds * 1000,
+      submitted: new Set(results.keys()), results,
       localPending: false,
     }
     $('#keyboard').hidden = true; $('#finalChance').hidden = room.me.role !== 'player'
     clearTimeout(finalTimer)
-    if (room.host) finalTimer = setTimeout(() => finishCoop('lost', TW.MAX_TRIES, null, true), seconds * 1000)
+    if (room.host) finalTimer = setTimeout(finishFinalChance, seconds * 1000)
     renderFinalChance(); renderBanner(); persistRoom()
   }
   function renderFinalChance() {
@@ -505,7 +515,7 @@
     const pending = room.finalChance.localPending
     panel.hidden = false
     panel.innerHTML = `<strong>마지막 기회 · <span id="finalCountdown">${Math.max(0, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000))}초</span></strong>
-      <p>각자 한 번만 제출할 수 있어요. 가장 먼저 정답을 맞힌 사람이 승리합니다.</p>
+      <p>각자 한 번만 제출할 수 있어요. 모두 제출한 뒤 정답자 순위를 알려드려요.</p>
       ${submitted || pending ? `<div class="hint ok">${submitted ? '제출 완료! 다른 참가자의 결과를 기다리는 중…' : '정답을 확인하는 중…'}</div>` : `<div class="final-form"><input class="field" id="finalWord" autofocus placeholder="마지막 추측" maxlength="8" autocomplete="off" spellcheck="false"><button class="btn accent" id="finalSubmit" data-act="room-final-submit" disabled>제출</button></div><div class="hint" id="finalHint">한 번만 제출할 수 있어요</div>`}`
   }
   function finalWordValue() {
@@ -539,15 +549,19 @@
     let guess
     try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
     if (guess.length !== room.size) return
-    room.finalChance.submitted.add(pid)
-    if (guess.join('') === TW.state.answerJamo.join('')) return finishCoop('won', TW.MAX_TRIES, pid, true)
-    const ack = { phase: 'final-ack', round: room.round, pid }
+    const ack = {
+      phase: 'final-ack', round: room.round, pid,
+      status: guess.join('') === TW.state.answerJamo.join('') ? 'won' : 'lost',
+      ms: Math.max(0, Date.now() - room.finalChance.startedAt),
+    }
     Net.send('turn', ack); onFinalAck(ack)
-    if (Array.from(room.activePids).every((id) => room.finalChance.submitted.has(id))) finishCoop('lost', TW.MAX_TRIES, null, true)
+    if (Array.from(room.activePids).every((id) => room.finalChance.submitted.has(id))) finishFinalChance()
   }
   function onFinalAck(payload) {
     if (!room?.finalChance?.active || Number(payload.round) !== room.round) return
     const pid = String(payload.pid)
+    if (!room.activePids.has(pid) || room.finalChance.submitted.has(pid)) return
+    room.finalChance.results.set(pid, { pid, status: payload.status === 'won' ? 'won' : 'lost', ms: Math.max(0, Number(payload.ms) || 0) })
     room.finalChance.submitted.add(pid)
     if (pid === room.me.pid) room.finalChance.localPending = false
     renderFinalChance(); persistRoom()
@@ -581,7 +595,7 @@
   }
   function forceRound() {
     if (!room?.host || room.over) return
-    if (room.kind === 'coop') return finishCoop('lost', TW.state?.guesses.length || 0)
+    if (room.kind === 'coop') return room.finalChance?.active ? finishFinalChance() : finishCoop('lost', TW.state?.guesses.length || 0)
     const ms = Date.now() - room.startedAt
     for (const pid of room.activePids) if (!room.results.has(pid)) room.results.set(pid, { pid, status: 'lost', tries: TW.MAX_TRIES, ms })
     finishRound()
@@ -597,13 +611,21 @@
     const payload = { round: room.round, scores, totals: totalsObject(), final: room.kind !== 'relay' || room.round >= room.roundsTotal }
     Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final))
   }
-  function finishCoop(status, tries, winnerPid = null, fromFinalChance = false) {
+  function finishFinalChance() {
+    if (!room?.host || room.over || !room.finalChance?.active) return
+    const byPid = room.finalChance.results
+    const finalResults = room.participants.filter((pid) => room.activePids.has(pid)).map((pid) => byPid.get(pid) || { pid, status: 'timeout', ms: null })
+    const winners = finalResults.filter((result) => result.status === 'won').sort((a, b) => a.ms - b.ms || room.participants.indexOf(a.pid) - room.participants.indexOf(b.pid))
+    finishCoop(winners.length ? 'won' : 'lost', TW.MAX_TRIES, winners[0]?.pid || null, true, finalResults)
+  }
+  function finishCoop(status, tries, winnerPid = null, fromFinalChance = false, finalResults = []) {
     if (!room?.host || room.over) return
     room.over = true; clearTimeout(finalTimer)
     if (room.finalChance) room.finalChance.active = false
     const payload = {
       round: room.round, coop: true, status: status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(tries) || 0),
       answer: H.encode(H.decompose(room.answer)), winnerPid: winnerPid ? String(winnerPid) : null, finalChance: Boolean(fromFinalChance),
+      finalResults: Array.isArray(finalResults) ? finalResults.map((result) => ({ pid: String(result.pid), status: ['won', 'lost', 'timeout'].includes(result.status) ? result.status : 'lost', ms: result.ms === null ? null : Math.max(0, Number(result.ms) || 0) })) : [],
     }
     Net.send('over', payload); TW.applyRemote(() => showCoopResult(payload))
   }
@@ -628,7 +650,14 @@
   function showCoopResult(payload) {
     if (!room) return
     clearInterval(timer); clearTimeout(skipTimer); clearTimeout(waitTimer); clearTimeout(finalTimer)
-    room.over = true; room.coopResult = { status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(payload.tries) || 0), winnerPid: payload.winnerPid ? String(payload.winnerPid) : null, finalChance: Boolean(payload.finalChance) }
+    const seen = new Set()
+    const finalResults = (Array.isArray(payload.finalResults) ? payload.finalResults : []).flatMap((result) => {
+      const pid = String(result?.pid || '')
+      if (!pid || seen.has(pid)) return []
+      seen.add(pid)
+      return [{ pid, status: ['won', 'lost', 'timeout'].includes(result.status) ? result.status : 'lost', ms: result.ms === null ? null : Math.max(0, Number(result.ms) || 0) }]
+    })
+    room.over = true; room.coopResult = { status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(payload.tries) || 0), winnerPid: payload.winnerPid ? String(payload.winnerPid) : null, finalChance: Boolean(payload.finalChance), finalResults }
     if (room.finalChance) room.finalChance.active = false
     room.turnPid = null; room.coopPending = false; $('#quickChat').hidden = true; $('#finalChance').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
@@ -639,9 +668,18 @@
     if (room.kind === 'coop') {
       const won = room.coopResult?.status === 'won'
       const winner = room.coopResult?.winnerPid ? playerName(room.coopResult.winnerPid) : null
-      const title = winner ? `${esc(winner)}님 승리!` : won ? '함께 맞혔어요!' : '이번에는 아쉬워요'
-      const detail = winner ? '마지막 기회에서 가장 먼저 정답을 맞혔어요' : won ? `${room.coopResult.tries}/${TW.MAX_TRIES}번 만에 성공` : `정답 · ${room.size}칸`
-      return `<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${detail}</span></div><div class="sheet-actions">${room.host ? '<button class="btn primary" data-act="room-again">한 판 더</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
+      const finalResults = (room.coopResult?.finalResults || []).slice().sort((a, b) => a.status === 'won' && b.status !== 'won' ? -1 : a.status !== 'won' && b.status === 'won' ? 1 : a.status === 'won' ? a.ms - b.ms : room.participants.indexOf(a.pid) - room.participants.indexOf(b.pid))
+      const winnerCount = finalResults.filter((result) => result.status === 'won').length
+      const soloWin = finalResults.length === 1 && winnerCount === 1
+      const title = soloWin ? '마지막 기회 성공!' : winner ? `${esc(winner)}님 1위!` : won ? '함께 맞혔어요!' : '이번에는 아쉬워요'
+      const detail = soloWin ? '마지막 기회에서 정답을 맞혔어요' : winner ? `정답자 ${winnerCount}명 · 빠른 순서` : won ? `${room.coopResult.tries}/${TW.MAX_TRIES}번 만에 성공` : `정답 · ${room.size}칸`
+      let rank = 0
+      const ranking = room.coopResult?.finalChance ? `<ol class="score-list">${finalResults.map((result) => {
+        const place = result.status === 'won' ? ++rank : '—'
+        const outcome = result.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초` : result.status === 'timeout' ? '미제출' : '오답'
+        return `<li><strong>${place}</strong><b>${esc(playerName(result.pid))}${result.pid === room.me.pid ? ' (나)' : ''}</b><span>${outcome}</span></li>`
+      }).join('')}</ol>` : ''
+      return `<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${detail}</span></div>${ranking}<div class="sheet-actions">${room.host ? '<button class="btn primary" data-act="room-again">한 판 더</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     const names = displayNames(); const relay = room.kind === 'relay'
     return `<h2>${relay ? `${room.round}/${room.roundsTotal} 라운드 결과` : '대결 결과'}</h2>
@@ -668,8 +706,8 @@
     if (!room) return
     if (room.kind === 'coop') {
       const score = room.coopResult?.status === 'won' ? `${room.coopResult.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`
-      const winner = room.coopResult?.winnerPid ? `마지막 기회 승자 ${playerName(room.coopResult.winnerPid)}` : null
-      return TW.copyAndTell([`오늘의 단어 협동 · ${room.size}칸 · ${score}`, winner, `정답 ${room.answer}`, inviteText()].filter(Boolean).join('\n'), '협동 결과를 복사했어요')
+      const finalRanks = (room.coopResult?.finalResults || []).filter((result) => result.status === 'won').sort((a, b) => a.ms - b.ms).map((result, i) => `${i + 1}. ${playerName(result.pid)} · ${(result.ms / 1000).toFixed(1)}초`)
+      return TW.copyAndTell([`오늘의 단어 협동 · ${room.size}칸 · ${score}`, ...finalRanks, `정답 ${room.answer}`, inviteText()].filter(Boolean).join('\n'), '협동 결과를 복사했어요')
     }
     const rows = room.scoreResults.map((r, i) => `${i + 1}. ${room.peers.get(r.pid)?.nick || '나간 참가자'} · ${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}`)
     TW.copyAndTell([`오늘의 단어 ${MODES[room.kind]} · ${room.size}칸`, `정답 ${room.answer}`, ...rows, inviteText()].join('\n'), '대결 결과를 복사했어요')
@@ -697,7 +735,7 @@
       waitRemaining: room.waitEndsAt ? Math.max(1, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : 0,
       guesses: room.kind === 'coop' ? (TW.state?.guesses || []).map((g) => H.encode(g)) : [],
       scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult,
-      finalChanceState: room.finalChance?.active ? { seconds: Math.max(1, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)), submitted: Array.from(room.finalChance.submitted) } : null,
+      finalChanceState: room.finalChance?.active ? { seconds: Math.max(1, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)), elapsedMs: Math.max(0, Date.now() - room.finalChance.startedAt), results: Array.from(room.finalChance.results.values()) } : null,
     })
   }
   function onSync(payload) {

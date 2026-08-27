@@ -202,7 +202,7 @@ try {
   await createMode('setter', 4)
   await Promise.all([
     waitFor(a, `Room.current?.kind === 'setter' && Room.current.setterPid === Room.current.me.pid && Net.status === 'live' && !document.querySelector('[data-act=room-start]').disabled`),
-    waitFor(b, `Room.current?.kind === 'setter' && Room.current.peers.size >= 2`),
+    waitFor(b, `Net.status === 'live'`),
   ])
   await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
   await waitFor(a, `document.getElementById('roomWord') !== null`)
@@ -295,16 +295,20 @@ try {
     await Promise.all([a, b, c].map((player) => waitFor(player, `TW.state?.guesses.length === ${row + 1} && !TW.busy`)))
   }
   await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.finalChance?.active && !document.getElementById('finalChance').hidden`)))
-  await Promise.all([
-    a.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = Words.answers[TW.state.size].filter((word) => word !== TW.state.answer)[8]; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`),
-    b.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = Words.answers[TW.state.size].filter((word) => word !== TW.state.answer)[9]; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`),
-    c.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = TW.state.answer; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`),
-  ])
-  await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.coopResult?.winnerPid && document.querySelector('.answer-reveal')?.textContent.includes(TW.state.answer)`)))
-  const finalWinner = await a.evaluate(`({ pid: Room.current.coopResult.winnerPid, name: document.querySelector('#sheetCard h2').textContent, rows: TW.state.guesses.length })`)
+  const aPid = await a.evaluate(`Room.current.me.pid`)
   const cPid = await c.evaluate(`Room.current.me.pid`)
-  if (finalWinner.pid !== cPid || !finalWinner.name.includes('C') || finalWinner.rows !== 5) throw new Error('협동 마지막 기회 승자 처리 실패: ' + JSON.stringify(finalWinner))
-  ok('협동 5회 실패 → 전원 동시 마지막 기회 · 최초 정답자 C 승리')
+  await c.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = TW.state.answer; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
+  await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.finalChance?.submitted.has('${cPid}')`)))
+  const stayedOpen = await a.evaluate(`Room.current.finalChance?.active && !Room.current.over && document.getElementById('finalChance').hidden === false`)
+  if (!stayedOpen) throw new Error('첫 정답 뒤 다른 참가자의 마지막 기회를 기다리지 않았습니다')
+  await sleep(150)
+  await a.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = TW.state.answer; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
+  await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.finalChance?.submitted.has('${aPid}')`)))
+  await b.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = Words.answers[TW.state.size].filter((word) => word !== TW.state.answer)[9]; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
+  await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.coopResult?.winnerPid && document.querySelector('.answer-reveal')?.textContent.includes(TW.state.answer)`)))
+  const finalWinner = await a.evaluate(`({ pid: Room.current.coopResult.winnerPid, ranking: Room.current.coopResult.finalResults.filter((result) => result.status === 'won').sort((x, y) => x.ms - y.ms).map((result) => result.pid), name: document.querySelector('#sheetCard h2').textContent, text: document.querySelector('#sheetCard').textContent, rows: TW.state.guesses.length })`)
+  if (finalWinner.pid !== cPid || finalWinner.ranking.join(',') !== [cPid, aPid].join(',') || !finalWinner.name.includes('C') || !finalWinner.text.includes('오답') || finalWinner.rows !== 5) throw new Error('협동 마지막 기회 시간 순위 처리 실패: ' + JSON.stringify(finalWinner))
+  ok('협동 5회 실패 → 첫 정답 뒤 전원 대기 · 정답자 제출 시간 순위')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

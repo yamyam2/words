@@ -37,8 +37,9 @@ const server = createServer((req, res) => {
   const path = (req.url || '/').split(/[?#]/)[0]
   const file = join(ROOT, 'dist', path === '/' ? 'index.html' : path.slice(1))
   try {
+    const body = readFileSync(file)
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
-    res.end(readFileSync(file))
+    res.end(body)
   } catch (e) { res.writeHead(404); res.end('not found') }
 })
 await new Promise((resolve) => server.listen(SITE_PORT, '127.0.0.1', resolve))

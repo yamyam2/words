@@ -166,11 +166,13 @@ try {
     for (const jamo of TW.state.answerJamo) TW.press(jamo)
     await TW.submit()
     while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
-    document.getElementById('btnMenu').click()
-    document.querySelector('[data-act=room-force]').click()
   })()`)
+  await waitFor(a, `document.body.classList.contains('watching') && !document.getElementById('quickChat').hidden && document.getElementById('gameSub').textContent.includes('마감까지')`)
+  await a.evaluate(`document.querySelector('[data-chat="화이팅!"]').click()`)
+  await waitFor(b, `document.getElementById('toast').textContent.includes('화이팅!')`)
+  await a.evaluate(`document.querySelector('#quickChat [data-act=room-force]').click()`)
   await Promise.all([waitFor(a, `document.querySelector('.score-list') !== null`), waitFor(b, `document.querySelector('.score-list') !== null`)])
-  ok('방장 강제 종료 → 두 브라우저에 순위표 표시')
+  ok('완주자 관전 · 고정 응원 · 60초 카운트다운 · 즉시 종료')
 
   async function createMode(kind, size = 4, rounds = 1) {
     await b.evaluate(`TW.GOES.leave()`)
@@ -239,28 +241,58 @@ try {
   if (!standings.includes('10점') || !standings.includes('5점')) throw new Error('릴레이 누적 점수가 맞지 않습니다: ' + standings)
   ok('릴레이 → 3라운드 연속 진행 · 누적 점수 · 최종 순위')
 
-  await createMode('coop', 4)
+  const coopCode = await createMode('coop', 4)
+  const c = await newPlayer('C')
+  players.push(c)
+  await c.evaluate(`(() => {
+    document.querySelector('[data-go=rooms]').click()
+    document.getElementById('roomNick').value = 'C'
+    document.getElementById('roomJoinCode').value = '${coopCode}'
+    document.querySelector('[data-act=room-join]').click()
+  })()`)
+  await Promise.all([waitFor(a, `document.querySelectorAll('#roomRoster li').length === 3`), waitFor(b, `Room.current.peers.size >= 3`), waitFor(c, `Room.current.peers.size >= 3`)])
   await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
-  await Promise.all([waitFor(a, `TW.state?.mode === 'coop'`), waitFor(b, `TW.state?.mode === 'coop'`)])
+  await Promise.all([waitFor(a, `TW.state?.mode === 'coop'`), waitFor(b, `TW.state?.mode === 'coop'`), waitFor(c, `TW.state?.mode === 'coop'`)])
   await a.evaluate(`(async () => {
     const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer)
     for (const jamo of Hangul.decompose(word)) TW.press(jamo)
     await TW.submit()
-    while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
   })()`)
-  await waitFor(b, `TW.state?.guesses.length === 1 && Room.current.turnPid === Room.current.me.pid`)
+  await Promise.all([waitFor(a, `TW.state?.guesses.length === 1 && Room.current.turnPid !== Room.current.me.pid`), waitFor(b, `TW.state?.guesses.length === 1 && Room.current.turnPid === Room.current.me.pid`), waitFor(c, `TW.state?.guesses.length === 1`)])
   const before = await a.evaluate(`TW.state.current.length`)
   await a.evaluate(`TW.press('ㄱ')`)
   const after = await a.evaluate(`TW.state.current.length`)
   if (before !== after) throw new Error('협동 모드에서 차례가 아닌 입력이 반영됐습니다')
   await b.evaluate(`(async () => {
+    const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer && Hangul.encode(Hangul.decompose(candidate)) !== Hangul.encode(TW.state.guesses[0]))
+    for (const jamo of Hangul.decompose(word)) TW.press(jamo)
+    await TW.submit()
+  })()`)
+  await Promise.all([waitFor(a, `TW.state?.guesses.length === 2`), waitFor(b, `TW.state?.guesses.length === 2 && Room.current.turnPid !== Room.current.me.pid`), waitFor(c, `TW.state?.guesses.length === 2 && Room.current.turnPid === Room.current.me.pid`)])
+  await c.evaluate(`(async () => {
     for (const jamo of TW.state.answerJamo) TW.press(jamo)
     await TW.submit()
-    while (TW.busy) await new Promise((resolve) => setTimeout(resolve, 50))
   })()`)
-  await Promise.all([waitFor(a, `document.querySelector('.answer-reveal') !== null`), waitFor(b, `document.querySelector('.answer-reveal') !== null`)])
-  if (await a.evaluate(`TW.state.guesses.length`) !== 2) throw new Error('협동 공유 보드에 두 줄이 동기화되지 않았습니다')
-  ok('협동 → 턴 잠금 · 공유 보드 애니메이션 · 함께 정답 처리')
+  await Promise.all([waitFor(a, `document.querySelector('.answer-reveal') !== null`), waitFor(b, `document.querySelector('.answer-reveal') !== null`), waitFor(c, `document.querySelector('.answer-reveal') !== null`)])
+  const shared = await Promise.all([a, b, c].map((player) => player.evaluate(`TW.state.guesses.map((guess) => Hangul.encode(guess)).join(',')`)))
+  if (new Set(shared).size !== 1 || shared[0].split(',').length !== 3) throw new Error('협동 공유 보드가 세 브라우저에서 갈라졌습니다: ' + JSON.stringify(shared))
+  const answerShown = await c.evaluate(`document.querySelector('.answer-reveal').textContent.includes(TW.state.answer)`)
+  if (!answerShown) throw new Error('협동 결과에 정답이 표시되지 않았습니다')
+  ok('협동 3인 → 방장 확정 보드 · 한 줄씩 순환 · 턴 잠금 · 정답 공개')
+
+  await a.evaluate(`document.querySelector('[data-act=room-again]').click()`)
+  await Promise.all([waitFor(a, `TW.state?.mode === 'coop' && TW.state.guesses.length === 0 && !Room.current.over`), waitFor(b, `TW.state?.mode === 'coop' && TW.state.guesses.length === 0 && !Room.current.over`), waitFor(c, `TW.state?.mode === 'coop' && TW.state.guesses.length === 0 && !Room.current.over`)])
+  const turns = [a, b, c, a, b]
+  for (let row = 0; row < turns.length; row++) {
+    await turns[row].evaluate(`(async () => {
+      const word = Words.answers[TW.state.size].filter((candidate) => candidate !== TW.state.answer)[${row}]
+      for (const jamo of Hangul.decompose(word)) TW.press(jamo)
+      await TW.submit()
+    })()`)
+    await Promise.all([a, b, c].map((player) => waitFor(player, `TW.state?.guesses.length === ${row + 1} && !TW.busy`)))
+  }
+  await Promise.all([a, b, c].map((player) => waitFor(player, `TW.state.status === 'lost' && document.querySelector('.answer-reveal')?.textContent.includes(TW.state.answer)`)))
+  ok('협동 5회 실패 → 전원에게 정답 즉시 공개')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

@@ -9,11 +9,13 @@
   const TO_WIRE = { absent: '0', present: '1', correct: '2' }
   const FROM_WIRE = ['absent', 'present', 'correct']
   const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동' }
+  const QUICK_MESSAGES = ['ㅋㅋㅋ', '화이팅!', '오 거의 다 왔다!', '천천히 해도 돼']
   let room = null
-  let draft = { kind: 'versus', size: 5, roundsTotal: 1 }
+  let draft = { kind: 'versus', size: 5, roundsTotal: 1, waitSeconds: 60 }
   let timer = null
   let nextTimer = null
   let skipTimer = null
+  let waitTimer = null
   let lastBlocked = 0
 
   function makePid() {
@@ -53,7 +55,7 @@
       round: room.round, roundsTotal: room.roundsTotal, active: Boolean(room.startedAt && !room.over),
       guesses: state?.room === room.code ? state.guesses.map((g) => H.encode(g)) : [],
       status: state?.room === room.code ? state.status : 'playing',
-      setterPid: room.setterPid, turnPid: room.turnPid, totals: totalsObject(),
+      setterPid: room.setterPid, turnPid: room.turnPid, totals: totalsObject(), waitSeconds: room.waitSeconds,
     })
   }
 
@@ -72,6 +74,7 @@
     <div class="room-options">${Object.entries(MODES).map(([k, label]) => `<button class="chip" data-rmode="${k}" aria-pressed="${draft.kind === k}">${label}</button>`).join('')}</div>
     <p><b>칸 수</b></p><div class="room-options">${[4, 5, 6, 7, 0].map((n) => `<button class="chip" data-rsize="${n}" aria-pressed="${draft.size === n}">${n || '랜덤'}${n ? '칸' : ''}</button>`).join('')}</div>
     <div ${draft.kind === 'relay' ? '' : 'hidden'}><p><b>라운드</b></p><div class="room-options">${[1, 3, 5].map((n) => `<button class="chip" data-rounds="${n}" aria-pressed="${draft.roundsTotal === n}">${n}라운드</button>`).join('')}</div></div>
+    <div ${draft.kind === 'coop' ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
     <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '라운드 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
     <div class="sheet-actions"><button class="btn primary" data-act="room-create">방 만들기</button></div>`
   TW.SHEETS.roommenu = () => {
@@ -132,7 +135,8 @@
     const choose = room.host && room.kind === 'setter' && !room.startedAt
     $('#roomCount').textContent = `${list.length}명`
     $('#roomRoster').innerHTML = list.map((p) => `<li ${choose ? `data-setter="${esc(p.pid)}" aria-pressed="${p.pid === room.setterPid}"` : ''}><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b><span>${room.kind === 'setter' && p.pid === room.setterPid ? '출제자' : p.pid === room.hostPid ? '방장' : '참가자'}</span></li>`).join('')
-    const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : ''}`
+    const wait = room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
+    const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : ''}${wait}`
     $('#lobbyActions').innerHTML = room.host
       ? `<p class="muted">${detail}${choose ? '<br>이름을 눌러 출제자를 바꿀 수 있어요.' : ''}</p><button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
       : `<p class="muted">${detail}<br>방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
@@ -146,26 +150,28 @@
     room = {
       code, kind: draft.kind, round: Number(resume?.round) || 1,
       roundsTotal: draft.kind === 'relay' ? Number(draft.roundsTotal) || 3 : 1, size: draft.size,
+      waitSeconds: [0, 30, 60, 90].includes(Number(draft.waitSeconds)) ? Number(draft.waitSeconds) : 60,
       me, host: false, hostPid: null, peers: new Map([[me.pid, { ...me, rows: [], status: 'waiting', online: true }]]),
       activePids: new Set(), participants: [], results: new Map(), totals: new Map(Object.entries(resume?.totals || {})),
       startedAt: null, answer: null, over: false, final: false, scoreResults: [],
       setterPid: resume?.setterPid || me.pid, turnPid: resume?.turnPid || null, pick: null, resume: resume || null,
+      waitEndsAt: null, coopPending: false,
     }
     globalThis.TWRoomHash = null
     persistRoom(); showLobby()
     Net.connect(code, me).catch(() => { if (room?.code === code) TW.toast('방을 깨우는 중이에요. 자동으로 다시 연결할게요', 2600) })
   }
   function leaveRoom() {
-    clearInterval(timer); clearTimeout(nextTimer); clearTimeout(skipTimer)
-    timer = nextTimer = skipTimer = null
+    clearInterval(timer); clearTimeout(nextTimer); clearTimeout(skipTimer); clearTimeout(waitTimer)
+    timer = nextTimer = skipTimer = waitTimer = null
     Net.leave(); room = null; TW.store.set('tw.room.v1', null)
     document.body.classList.remove('watching')
-    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roomBanner').hidden = true
+    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true
     $('#btnBack').dataset.go = 'home'; $('#btnMenu').dataset.sheet = 'stats'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '기록')
     TW.GOES.home()
   }
 
-  function lobbyPayload() { return { kind: room.kind, size: room.size, roundsTotal: room.roundsTotal, setterPid: room.setterPid } }
+  function lobbyPayload() { return { kind: room.kind, size: room.size, roundsTotal: room.roundsTotal, setterPid: room.setterPid, waitSeconds: room.waitSeconds } }
   function broadcastLobby() {
     if (room?.host && !room.startedAt && Net.status === 'live') Net.send('lobby', lobbyPayload())
   }
@@ -175,6 +181,7 @@
     if (![0, ...TW.SIZES].includes(size)) return
     room.kind = payload.kind; room.size = size
     room.roundsTotal = payload.kind === 'relay' && [1, 3, 5].includes(rounds) ? rounds : 1
+    room.waitSeconds = [0, 30, 60, 90].includes(Number(payload.waitSeconds)) ? Number(payload.waitSeconds) : 60
     room.setterPid = String(payload.setterPid || room.hostPid || '')
     renderLobby(); persistRoom()
   }
@@ -192,6 +199,10 @@
     renderLobby(); renderPeers(); renderBanner()
     if (!room.startedAt) broadcastLobby()
     if (room.kind === 'coop' && room.startedAt && !room.over) scheduleTurnSkip()
+    if (room.host && room.waitEndsAt && !room.over) {
+      clearTimeout(waitTimer)
+      waitTimer = setTimeout(forceRound, Math.max(0, room.waitEndsAt - Date.now()))
+    }
   }
   function onStatus(status) {
     renderLobby()
@@ -219,7 +230,7 @@
     const payload = {
       round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size,
       answer: H.encode(H.decompose(answer)), setter: setterPid, participants,
-      turnPid: room.kind === 'coop' ? participants[0] : null, ts: Date.now(),
+      turnPid: room.kind === 'coop' ? participants[0] : null, waitSeconds: room.waitSeconds, ts: Date.now(),
     }
     Net.send('start', payload); beginRound(payload, false)
   }
@@ -265,7 +276,8 @@
   }
   function validParticipants(payload) {
     const raw = Array.isArray(payload.participants) ? payload.participants.map(String) : []
-    return Array.from(new Set(raw.filter((pid) => room.peers.has(pid))))
+    // 방장이 정한 순서를 그대로 쓴다. Presence 도착 순서로 다시 거르면 기기마다 턴 순서가 달라진다.
+    return Array.from(new Set(raw.filter((pid) => pid && pid.length <= 64)))
   }
   function beginRound(payload, spectator) {
     if (!room || Number(payload.round) < room.round) return
@@ -273,10 +285,12 @@
     if (!answer || !TW.SIZES.includes(size) || !Object.hasOwn(MODES, payload.kind)) return
     room.round = Number(payload.round) || 1; room.roundsTotal = Math.max(1, Number(payload.roundsTotal) || room.roundsTotal || 1)
     room.kind = payload.kind; room.size = size; room.answer = answer
+    room.waitSeconds = [0, 30, 60, 90].includes(Number(payload.waitSeconds)) ? Number(payload.waitSeconds) : room.waitSeconds
     room.setterPid = payload.setter ? String(payload.setter) : null
     room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
     room.turnPid = room.kind === 'coop' ? String(payload.turnPid || room.participants[0] || '') : null
     room.startedAt = Date.now(); room.over = false; room.final = false; room.results = new Map(); room.scoreResults = []
+    room.waitEndsAt = null; room.coopPending = false; clearTimeout(waitTimer)
     for (const p of room.peers.values()) {
       p.rows = []; p.status = room.activePids.has(p.pid) ? 'playing' : p.pid === room.setterPid ? 'setter' : 'spectator'; p.tries = null; p.ms = null
     }
@@ -287,7 +301,7 @@
     const watching = room.me.role !== 'player'
     document.body.classList.toggle('watching', watching); $('#keyboard').hidden = watching; $('.board-wrap').hidden = watching
     $('#peers').hidden = room.kind === 'coop'
-    renderPeers(); renderBanner(); startTimer(); persistRoom()
+    renderPeers(); renderBanner(); renderQuickChat(); startTimer(); persistRoom()
   }
   function startTimer() {
     clearInterval(timer)
@@ -295,7 +309,10 @@
       if (!room?.startedAt || room.over) return
       const sec = Math.floor((Date.now() - room.startedAt) / 1000)
       const round = room.kind === 'relay' ? `${room.round}/${room.roundsTotal}R · ` : ''
-      $('#gameSub').textContent = `${round}${room.size}칸 · ${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
+      const left = room.waitEndsAt ? Math.max(0, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : null
+      $('#gameSub').textContent = left === null
+        ? `${round}${room.size}칸 · ${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
+        : `${round}마감까지 ${left}초`
     }
     tick(); timer = setInterval(tick, 1000)
   }
@@ -303,16 +320,60 @@
     const banner = $('#roomBanner')
     if (!banner || !room?.startedAt) { if (banner) banner.hidden = true; return }
     let text = ''
-    if (room.kind === 'coop') text = room.turnPid === room.me.pid ? '내 차례예요' : `지금은 ${playerName(room.turnPid)}님 차례`
+    if (room.over) text = `정답: ${room.answer}`
+    else if (room.kind === 'coop' && room.coopPending) text = '제출을 확인하는 중…'
+    else if (room.kind === 'coop') text = room.turnPid === room.me.pid ? '내 차례예요' : `지금은 ${playerName(room.turnPid)}님 차례`
+    else if (room.me.role === 'finished') text = room.waitEndsAt ? '완료! 남은 참가자를 응원해 주세요' : '완료! 다른 참가자의 보드를 보고 있어요'
     else if (room.me.role === 'setter') text = `내가 낸 정답: ${room.answer}`
     else if (room.me.role === 'spectator') text = '이번 라운드는 관전 중이에요'
     banner.textContent = text; banner.hidden = !text
   }
-  function canPlay() { return Boolean(room && room.me.role === 'player' && !room.over && (room.kind !== 'coop' || room.turnPid === room.me.pid)) }
+  function canPlay() { return Boolean(room && room.me.role === 'player' && !room.over && (room.kind !== 'coop' || room.turnPid === room.me.pid && !room.coopPending)) }
   function blockedInput() {
     if (!room || Date.now() - lastBlocked < 1200) return
     lastBlocked = Date.now()
-    TW.toast(room.me.role !== 'player' ? '이번 라운드는 관전 중이에요' : `${playerName(room.turnPid)}님 차례예요`)
+    TW.toast(room.me.role !== 'player' ? '이번 라운드는 관전 중이에요' : room.coopPending ? '제출을 확인하는 중이에요' : `${playerName(room.turnPid)}님 차례예요`)
+  }
+  function renderQuickChat() {
+    const bar = $('#quickChat')
+    if (!bar || !room?.startedAt || room.over) { if (bar) bar.hidden = true; return }
+    const eligible = ['finished', 'setter', 'spectator'].includes(room.me.role)
+    if (!eligible) { bar.hidden = true; return }
+    const force = room.host && room.kind !== 'coop' ? '<button class="btn accent" data-act="room-force">지금 결과 보기</button>' : ''
+    bar.innerHTML = QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('') + force
+    bar.hidden = false
+  }
+  function showWaitingView() {
+    if (!room || room.kind === 'coop' || room.over) return
+    room.me.role = 'finished'
+    document.body.classList.add('watching')
+    $('#keyboard').hidden = true; $('.board-wrap').hidden = true; $('#peers').hidden = false
+    renderPeers(); renderBanner(); renderQuickChat()
+  }
+  function sendChat(text) {
+    if (!room || !QUICK_MESSAGES.includes(text) || !['finished', 'setter', 'spectator'].includes(room.me.role) || room.over) return
+    Net.send('chat', { pid: room.me.pid, text, round: room.round })
+    TW.toast(`나: ${text}`, 1600)
+  }
+  function onChat(payload) {
+    if (!room || room.over || Number(payload.round) !== room.round || !QUICK_MESSAGES.includes(payload.text)) return
+    const sender = room.peers.get(String(payload.pid))
+    if (!sender) return
+    TW.toast(`${playerName(sender.pid)}: ${payload.text}`, 2200)
+  }
+  function beginWait(payload) {
+    if (!room || room.over || room.kind === 'coop' || Number(payload.round) !== room.round) return
+    const seconds = Math.max(1, Math.min(90, Number(payload.seconds) || 0))
+    room.waitEndsAt = Date.now() + seconds * 1000
+    clearTimeout(waitTimer)
+    if (room.host) waitTimer = setTimeout(forceRound, seconds * 1000)
+    renderBanner(); renderQuickChat()
+  }
+  function maybeStartWait() {
+    if (!room?.host || room.kind === 'coop' || room.over || room.waitEndsAt || !room.waitSeconds) return
+    if (!room.results.size || room.results.size >= room.activePids.size) return
+    const payload = { round: room.round, seconds: room.waitSeconds }
+    Net.send('wait', payload); beginWait(payload)
   }
 
   function encodeMarks(marks) { return marks.map((m) => TO_WIRE[m]).join('') }
@@ -329,14 +390,7 @@
   }
   function localMark(row, marks) {
     if (!room) return
-    if (room.kind === 'coop') {
-      if (room.turnPid !== room.me.pid) return
-      const guess = TW.state?.guesses?.[row]
-      if (!guess) return
-      const status = TW.state.status; const nextPid = status === 'playing' ? nextParticipant(room.me.pid, false) : null
-      Net.send('turn', { pid: room.me.pid, row, guess: H.encode(guess), marks: encodeMarks(marks), status, nextPid })
-      room.turnPid = nextPid; renderBanner(); scheduleTurnSkip(); persistRoom(); return
-    }
+    if (room.kind === 'coop') return
     const p = room.peers.get(room.me.pid)
     if (p) { if (!p.rows) p.rows = []; p.rows[row] = marks.slice() }
     Net.send('mark', { pid: room.me.pid, row, marks: encodeMarks(marks) }); renderPeers(); persistRoom()
@@ -346,7 +400,7 @@
     if (room.kind === 'coop') { if (room.host) finishCoop(status, tries); return }
     const result = { pid: room.me.pid, status, tries, ms: Date.now() - room.startedAt }
     room.results.set(result.pid, result); Object.assign(room.peers.get(result.pid), result)
-    Net.send('done', result); renderPeers(); persistRoom(); maybeFinish()
+    Net.send('done', result); renderPeers(); persistRoom(); showWaitingView(); maybeStartWait(); maybeFinish()
   }
   function onMark(payload) {
     if (!room || room.kind === 'coop' || !room.startedAt || payload.pid === room.me.pid) return
@@ -359,29 +413,67 @@
     const p = room.peers.get(String(payload.pid))
     if (!p || !room.activePids.has(p.pid)) return
     const result = { pid: p.pid, status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(1, Math.min(TW.MAX_TRIES, Number(payload.tries) || TW.MAX_TRIES)), ms: Math.max(0, Number(payload.ms) || 0) }
-    room.results.set(result.pid, result); Object.assign(p, result); renderPeers(); maybeFinish()
+    room.results.set(result.pid, result); Object.assign(p, result); renderPeers(); maybeStartWait(); maybeFinish()
   }
-  function onTurn(payload) {
-    if (!room || room.kind !== 'coop' || !room.startedAt || room.over) return
-    if (payload.skip) {
-      if (String(payload.pid) !== room.turnPid) return
-      room.turnPid = String(payload.nextPid || ''); renderBanner(); scheduleTurnSkip(); return
-    }
+  function submitCoop(guess) {
+    if (!room || room.kind !== 'coop') return false
+    if (!canPlay()) { blockedInput(); return true }
+    room.coopPending = true; renderBanner()
+    const row = TW.state.guesses.length
+    const payload = { phase: 'submit', pid: room.me.pid, row, guess: H.encode(guess), round: room.round }
+    if (room.host) processCoopSubmit(payload)
+    else Net.send('turn', payload)
+    setTimeout(() => {
+      if (!room?.coopPending || room.kind !== 'coop' || room.round !== payload.round || TW.state?.guesses.length !== row) return
+      room.coopPending = false; renderBanner(); TW.toast('제출이 전달되지 않았어요. 다시 눌러 주세요')
+      Net.send('sync?', { pid: room.me.pid })
+    }, 6000)
+    return true
+  }
+  function processCoopSubmit(payload) {
+    if (!room?.host || room.kind !== 'coop' || room.over || payload.phase !== 'submit') return
     const pid = String(payload.pid); const row = Number(payload.row)
-    if (pid === room.me.pid || pid !== room.turnPid || row !== TW.state?.guesses.length) return
+    if (Number(payload.round) !== room.round || pid !== room.turnPid || row !== TW.state?.guesses.length) return
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
+    if (guess.length !== room.size) return
+    const marks = H.score(guess, TW.state.answerJamo)
+    const won = marks.every((mark) => mark === 'correct')
+    const status = won ? 'won' : row + 1 >= TW.MAX_TRIES ? 'lost' : 'playing'
+    const commit = {
+      phase: 'commit', pid, row, guess: H.encode(guess), marks: encodeMarks(marks), status,
+      nextPid: status === 'playing' ? nextParticipant(pid, false) : null, round: room.round,
+    }
+    Net.send('turn', commit)
+    applyCoopCommit(commit)
+  }
+  function applyCoopCommit(payload) {
+    if (!room || room.kind !== 'coop' || room.over || payload.phase !== 'commit') return
+    const pid = String(payload.pid); const row = Number(payload.row)
+    if (Number(payload.round) !== room.round || pid !== room.turnPid || row !== TW.state?.guesses.length) return
     let guess
     try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
     const marks = decodeMarks(payload.marks)
     if (guess.length !== room.size || !marks) return
     const expected = H.score(guess, TW.state.answerJamo)
-    if (expected.some((m, i) => m !== marks[i])) return
+    if (expected.some((mark, i) => mark !== marks[i])) return
     const status = ['won', 'lost'].includes(payload.status) ? payload.status : 'playing'
-    const nextPid = status === 'playing' ? String(payload.nextPid || nextParticipant(pid, false) || '') : null
+    const nextPid = status === 'playing' ? String(payload.nextPid || '') : null
+    if (pid === room.me.pid) room.coopPending = false
     TW.applyRemote(() => TW.applyRoomTurn(guess, marks, status, () => {
       room.turnPid = nextPid; renderBanner(); persistRoom()
       if (status !== 'playing' && room.host) finishCoop(status, row + 1)
       else scheduleTurnSkip()
     }))
+  }
+  function onTurn(payload) {
+    if (!room || room.kind !== 'coop' || !room.startedAt || room.over) return
+    if (payload.phase === 'submit') return TW.applyRemote(() => processCoopSubmit(payload))
+    if (payload.phase === 'commit') return applyCoopCommit(payload)
+    if (payload.skip || payload.phase === 'skip') {
+      if (String(payload.pid) !== room.turnPid) return
+      room.turnPid = String(payload.nextPid || ''); room.coopPending = false; renderBanner(); scheduleTurnSkip(); return
+    }
   }
   function scheduleTurnSkip() {
     clearTimeout(skipTimer); skipTimer = null
@@ -391,7 +483,7 @@
       if (!room?.host || room.over || room.turnPid !== skipped || room.peers.get(skipped)?.online) return
       const nextPid = nextParticipant(skipped, true)
       if (!nextPid) return
-      Net.send('turn', { skip: true, pid: skipped, nextPid }); room.turnPid = nextPid; renderBanner(); persistRoom()
+      Net.send('turn', { phase: 'skip', pid: skipped, nextPid, round: room.round }); room.turnPid = nextPid; room.coopPending = false; renderBanner(); persistRoom()
     }, 15000)
   }
   function maybeFinish() {
@@ -407,7 +499,7 @@
   }
   function finishRound() {
     if (!room || room.over) return
-    room.over = true
+    room.over = true; clearTimeout(waitTimer); room.waitEndsAt = null
     const scores = Array.from(room.results.values())
     if (room.kind === 'relay') {
       const points = Net.awardPoints(scores)
@@ -419,7 +511,7 @@
   function finishCoop(status, tries) {
     if (!room?.host || room.over) return
     room.over = true
-    const payload = { round: room.round, coop: true, status: status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(tries) || 0) }
+    const payload = { round: room.round, coop: true, status: status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(tries) || 0), answer: H.encode(H.decompose(room.answer)) }
     Net.send('over', payload); TW.applyRemote(() => showCoopResult(payload))
   }
   function onOver(payload) {
@@ -430,20 +522,22 @@
     TW.applyRemote(() => showScoreboard(payload.scores, Boolean(payload.final)))
   }
   function sortedResults(results) {
-    return results.slice().sort((a, b) => a.status === 'won' && b.status !== 'won' ? -1 : a.status !== 'won' && b.status === 'won' ? 1 : (a.tries || 99) - (b.tries || 99) || (a.ms || Infinity) - (b.ms || Infinity))
+    return results.slice().sort((a, b) => a.status === 'won' && b.status !== 'won' ? -1 : a.status !== 'won' && b.status === 'won' ? 1 : (a.ms || Infinity) - (b.ms || Infinity) || (a.tries || 99) - (b.tries || 99))
   }
   function showScoreboard(results, final) {
     if (!room) return
-    clearInterval(timer); clearTimeout(nextTimer)
+    clearInterval(timer); clearTimeout(nextTimer); clearTimeout(waitTimer)
     room.over = true; room.final = Boolean(final); room.scoreResults = sortedResults(results)
-    TW.endRoomGame(); persistRoom(); TW.openSheet('scoreboard')
+    room.waitEndsAt = null; $('#quickChat').hidden = true
+    TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
     if (room.kind === 'relay' && !room.final && room.host) nextTimer = setTimeout(nextRound, 10000)
   }
   function showCoopResult(payload) {
     if (!room) return
-    clearInterval(timer); clearTimeout(skipTimer)
+    clearInterval(timer); clearTimeout(skipTimer); clearTimeout(waitTimer)
     room.over = true; room.coopResult = { status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(0, Number(payload.tries) || 0) }
-    TW.endRoomGame(); persistRoom(); TW.openSheet('scoreboard')
+    room.turnPid = null; room.coopPending = false; $('#quickChat').hidden = true
+    TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
   }
 
   TW.SHEETS.scoreboard = () => {
@@ -455,7 +549,7 @@
     const names = displayNames(); const relay = room.kind === 'relay'
     return `<h2>${relay ? `${room.round}/${room.roundsTotal} 라운드 결과` : '대결 결과'}</h2>
       <div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.size}칸</span></div>
-      <ol class="score-list">${room.scoreResults.map((r, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(r.pid) || '나간 참가자')}</b><span>${r.status === 'won' ? `${r.tries}/${TW.MAX_TRIES} · ${(r.ms / 1000).toFixed(1)}초` : `X/${TW.MAX_TRIES}`}</span></li>`).join('')}</ol>
+      <ol class="score-list">${room.scoreResults.map((r, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(r.pid) || '나간 참가자')}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>`).join('')}</ol>
       <div class="sheet-actions">${relay && room.final ? '<button class="btn primary" data-act="room-standings">최종 순위 보기</button>' : relay && room.host ? '<button class="btn primary" data-act="room-next">다음 라운드</button>' : relay ? '<p class="muted">방장이 다음 라운드를 시작하기를 기다리는 중…</p>' : ''}<button class="btn accent" data-act="room-copy-result">결과 복사하기</button><button class="btn ghost" data-go="leave">나가기</button></div>`
   }
   TW.SHEETS.standings = () => {
@@ -479,7 +573,7 @@
       const score = room.coopResult?.status === 'won' ? `${room.coopResult.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`
       return TW.copyAndTell([`오늘의 단어 협동 · ${room.size}칸 · ${score}`, `정답 ${room.answer}`, inviteText()].join('\n'), '협동 결과를 복사했어요')
     }
-    const rows = room.scoreResults.map((r, i) => `${i + 1}. ${room.peers.get(r.pid)?.nick || '나간 참가자'} · ${r.status === 'won' ? `${r.tries}/${TW.MAX_TRIES} · ${(r.ms / 1000).toFixed(1)}초` : `X/${TW.MAX_TRIES}`}`)
+    const rows = room.scoreResults.map((r, i) => `${i + 1}. ${room.peers.get(r.pid)?.nick || '나간 참가자'} · ${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}`)
     TW.copyAndTell([`오늘의 단어 ${MODES[room.kind]} · ${room.size}칸`, `정답 ${room.answer}`, ...rows, inviteText()].join('\n'), '대결 결과를 복사했어요')
   }
   function renderPeers() {
@@ -501,13 +595,24 @@
     Net.send('sync!', {
       pid: payload.pid, round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size: room.size,
       answer: H.encode(H.decompose(room.answer)), ts: Date.now(), setter: room.setterPid,
-      participants: room.participants, turnPid: room.turnPid, boards,
+      participants: room.participants, turnPid: room.turnPid, boards, waitSeconds: room.waitSeconds,
+      waitRemaining: room.waitEndsAt ? Math.max(1, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : 0,
       guesses: room.kind === 'coop' ? (TW.state?.guesses || []).map((g) => H.encode(g)) : [],
       scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult,
     })
   }
   function onSync(payload) {
-    if (!room || payload.pid !== room.me.pid || room.startedAt) return
+    if (!room || payload.pid !== room.me.pid) return
+    if (room.startedAt) {
+      if (room.kind !== 'coop' || Number(payload.round) !== room.round) return
+      TW.applyRemote(() => {
+        room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
+        room.turnPid = String(payload.turnPid || ''); room.coopPending = false
+        TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
+        renderBanner(); persistRoom()
+      })
+      return
+    }
     const resume = room.resume
     const isParticipant = Array.isArray(payload.participants) && payload.participants.map(String).includes(room.me.pid)
     const canResume = Boolean(resume?.active && isParticipant && Number(resume.round) === Number(payload.round))
@@ -525,15 +630,18 @@
     }
     for (const result of payload.scores || []) room.results.set(result.pid, result)
     room.totals = new Map(Object.entries(payload.totals || {})); renderPeers(); renderBanner()
+    if (Number(payload.waitRemaining) > 0) beginWait({ round: room.round, seconds: Number(payload.waitRemaining) })
     if (payload.over) room.kind === 'coop' ? showCoopResult(payload.coopResult || payload) : showScoreboard(Array.from(room.results.values()), Boolean(payload.final))
   }
 
   document.addEventListener('click', (event) => {
+    const chat = event.target.closest('[data-chat]')
+    if (chat) { sendChat(chat.dataset.chat); return }
     const setter = event.target.closest('[data-setter]')
     if (setter && room?.host && room.kind === 'setter' && !room.startedAt) {
       room.setterPid = setter.dataset.setter; renderLobby(); broadcastLobby(); return
     }
-    const target = event.target.closest('[data-rmode],[data-rsize],[data-rounds]')
+    const target = event.target.closest('[data-rmode],[data-rsize],[data-rounds],[data-wait]')
     if (!target || target.disabled) return
     if (target.dataset.rmode) {
       draft.kind = target.dataset.rmode
@@ -543,6 +651,7 @@
     }
     if (target.dataset.rsize !== undefined) draft.size = Number(target.dataset.rsize)
     if (target.dataset.rounds !== undefined) draft.roundsTotal = Number(target.dataset.rounds)
+    if (target.dataset.wait !== undefined) draft.waitSeconds = Number(target.dataset.wait)
     for (const chip of target.parentElement.querySelectorAll('.chip')) chip.setAttribute('aria-pressed', String(chip === target))
   })
   document.addEventListener('input', (event) => { if (event.target.id === 'roomWord') paintSetterWord() })
@@ -554,6 +663,7 @@
   })
   Net.on('roster', onRoster); Net.on('status', onStatus); Net.on('lobby', onLobby); Net.on('pick', onPick); Net.on('word', onWord)
   Net.on('start', (payload) => beginRound(payload, false)); Net.on('mark', onMark); Net.on('done', onDone); Net.on('turn', onTurn)
+  Net.on('chat', onChat); Net.on('wait', beginWait)
   Net.on('over', onOver); Net.on('sync?', onSyncRequest); Net.on('sync!', onSync)
 
   const roomButton = $('#btnRooms')
@@ -561,8 +671,8 @@
     roomButton.hidden = false
     const resume = TW.store.get('tw.room.v1', null)
     if (globalThis.TWRoomHash) setTimeout(() => TW.openSheet('rooms'), 0)
-    else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(resume.code, resume.nick, { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1 }, resume), 0)
+    else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(resume.code, resume.nick, { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1, waitSeconds: [0, 30, 60, 90].includes(Number(resume.waitSeconds)) ? Number(resume.waitSeconds) : 60 }, resume), 0)
   } else { roomButton.remove(); globalThis.TWRoomHash = null }
 
-  globalThis.Room = { get current() { return room }, localMark, localDone, canPlay, blockedInput, leave: leaveRoom, normalizeCode, repaintPeers: renderPeers }
+  globalThis.Room = { get current() { return room }, localMark, localDone, submitCoop, canPlay, blockedInput, leave: leaveRoom, normalizeCode, repaintPeers: renderPeers }
 })()

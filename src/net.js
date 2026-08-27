@@ -8,7 +8,7 @@
   'use strict'
 
   const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ'
-  const APP_EVENTS = ['lobby', 'pick', 'start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn']
+  const APP_EVENTS = ['lobby', 'pick', 'start', 'mark', 'done', 'over', 'sync?', 'sync!', 'word', 'turn', 'chat', 'wait']
 
   function encodeFrame(frame) { return JSON.stringify(frame) }
   function decodeFrame(text) {
@@ -65,7 +65,7 @@
     const ranked = (results || []).slice().sort((a, b) => {
       if (a.status === 'won' && b.status !== 'won') return -1
       if (a.status !== 'won' && b.status === 'won') return 1
-      return (a.tries || 99) - (b.tries || 99) || (a.ms || Infinity) - (b.ms || Infinity)
+      return (a.ms || Infinity) - (b.ms || Infinity) || (a.tries || 99) - (b.tries || 99)
     })
     const out = {}
     let place = 0

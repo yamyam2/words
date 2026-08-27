@@ -348,6 +348,9 @@
     // 친구가 직접 낸 문제는 내장 사전에 없을 수도 있다. 정답 그 자체만은 제출할 수 있게 한다.
     const isAnswer = guess.join('') === state.answerJamo.join('')
     if (!isValid(guess) && !isAnswer) return reject('사전에 없는 단어예요')
+    // 협동은 방장이 한 줄을 확정한 뒤 모든 화면에 똑같이 적용한다.
+    // 여기서 로컬 보드를 먼저 바꾸면 참가자마다 행/턴이 갈라질 수 있다.
+    if (state.room && globalThis.Room?.submitCoop?.(guess.slice())) return
 
     // 비동기 채점기로 교체해도 같은 입력이 두 번 제출되지 않게 채점 전에 잠근다.
     busy = true

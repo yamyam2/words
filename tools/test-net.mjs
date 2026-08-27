@@ -48,12 +48,12 @@ test('방 코드는 혼동 문자가 없는 6자리다', () => {
   }
 })
 
-test('완주 순위에 5, 3, 2, 1점을 주고 미완주는 0점이다', () => {
+test('완주 시간을 우선해 5, 3, 2, 1점을 주고 미완주는 0점이다', () => {
   assert.deepEqual(Net.awardPoints([
     { pid: 'third', status: 'won', tries: 4, ms: 1000 },
     { pid: 'lost', status: 'lost', tries: 5, ms: 500 },
     { pid: 'first', status: 'won', tries: 2, ms: 2000 },
     { pid: 'fourth', status: 'won', tries: 5, ms: 2000 },
     { pid: 'second', status: 'won', tries: 2, ms: 3000 },
-  ]), { first: 5, second: 3, third: 2, fourth: 1, lost: 0 })
+  ]), { third: 5, first: 3, fourth: 2, second: 1, lost: 0 })
 })

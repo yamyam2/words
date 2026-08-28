@@ -126,9 +126,11 @@ try {
   const rootModes = await a.evaluate(`[...document.querySelectorAll('#homeRootMenu .btn')].filter((button) => !button.hidden).map((button) => button.textContent.trim())`)
   if (rootModes.join(',') !== '싱글 모드,멀티 모드') throw new Error('첫 화면 2단계 메뉴 실패: ' + JSON.stringify(rootModes))
   await a.evaluate(`(() => { document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = 'A' })()`)
-  const initialModePick = await a.evaluate(`({ selected: document.querySelectorAll('[data-room-pick][aria-pressed="true"]').length, createDisabled: document.querySelector('[data-act=room-open-create]').disabled })`)
-  if (initialModePick.selected !== 0 || !initialModePick.createDisabled) throw new Error('멀티 모드 초기 선택 상태 실패: ' + JSON.stringify(initialModePick))
-  await a.evaluate(`(() => { document.querySelector('[data-room-pick=versus]').click(); document.querySelector('[data-act=room-open-create]').click(); document.querySelector('[data-act=room-create]').click() })()`)
+  const initialModePick = await a.evaluate(`({ selected: document.querySelectorAll('[data-room-pick][aria-pressed="true"]').length, categories: [...document.querySelectorAll('[data-room-category]')].map((button) => button.textContent.trim()), modeHidden: document.getElementById('roomModeStep').hidden })`)
+  if (initialModePick.selected !== 0 || initialModePick.categories.join(',') !== '개인전,팀전' || !initialModePick.modeHidden) throw new Error('멀티 모드 초기 선택 상태 실패: ' + JSON.stringify(initialModePick))
+  const groupedModes = await a.evaluate(`(() => { document.querySelector('[data-room-category=solo]').click(); const solo = [...document.querySelectorAll('[data-room-pick]')].map((button) => button.textContent.trim()); document.querySelector('[data-room-category=team]').click(); const team = [...document.querySelectorAll('[data-room-pick]')].map((button) => button.textContent.trim()); return { solo, team } })()`)
+  if (groupedModes.solo.join(',') !== '같은 단어 대결,출제 대결,연판' || groupedModes.team.join(',') !== '협동,팀전,팀 출제 대결,스파이전,대장전') throw new Error('개인전/팀전 모드 분류 실패: ' + JSON.stringify(groupedModes))
+  await a.evaluate(`(() => { document.querySelector('[data-room-category=solo]').click(); document.querySelector('[data-room-pick=versus]').click(); document.querySelector('[data-act=room-open-create]').click(); document.querySelector('[data-act=room-create]').click() })()`)
   await waitFor(a, `!document.getElementById('lobby').hidden && document.getElementById('roomCode').textContent.length === 6`)
   const code = await a.evaluate(`document.getElementById('roomCode').textContent`)
 
@@ -182,13 +184,16 @@ try {
     await b.evaluate(`TW.GOES.leave()`)
     await a.evaluate(`TW.GOES.leave()`)
     await Promise.all([waitFor(a, `!document.getElementById('home').hidden`), waitFor(b, `!document.getElementById('home').hidden`)])
+    await sleep(900)
     await a.evaluate(`(() => {
       document.querySelector('[data-go=rooms]').click()
       document.getElementById('roomNick').value = 'A'
+      document.querySelector('[data-room-category="${['versus', 'setter', 'relay'].includes(kind) ? 'solo' : 'team'}"]').click()
       document.querySelector('[data-room-pick="${kind}"]').click()
       document.querySelector('[data-act=room-open-create]').click()
       document.querySelector('[data-rsize="${size}"]').click()
       ${kind === 'relay' ? `document.querySelector('[data-rounds="${rounds}"]').click()` : ''}
+      ${kind === 'captain' ? `document.querySelector('[data-eliminate="2"]').click()` : ''}
       document.querySelector('[data-act=room-create]').click()
     })()`)
     await waitFor(a, `!document.getElementById('lobby').hidden && document.getElementById('roomCode').textContent.length === 6`)
@@ -258,7 +263,7 @@ try {
   await a.evaluate(`document.querySelector('[data-act=room-standings]').click()`)
   const standings = await a.evaluate(`document.querySelector('.score-list').textContent`)
   if (!standings.includes('10점') || !standings.includes('5점')) throw new Error('릴레이 누적 점수가 맞지 않습니다: ' + standings)
-  ok('릴레이 → 3라운드 연속 진행 · 누적 점수 · 최종 순위')
+  ok('연판 → 3라운드 연속 진행 · 누적 점수 · 최종 순위')
 
   const coopCode = await createMode('coop', 4)
   const c = await newPlayer('C')
@@ -371,8 +376,18 @@ try {
     await player.evaluate(`(() => { TW.GOES.leave(); document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = '${player.name}'; document.getElementById('roomJoinCode').value = '${teamCode}'; document.querySelector('[data-act=room-join]').click() })()`)
   }
   const four = [a, b, c, d]
-  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'team' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 12000)))
+  await waitFor(a, `Room.current?.kind === 'team' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 20000)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'team'`, 12000)))
   const pids = Object.fromEntries(await Promise.all(four.map(async (player) => [player.name, await player.evaluate(`Room.current.me.pid`)])))
+  await a.evaluate(`document.querySelector('[data-act=room-random-teams]').click()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamsHidden === true`, 12000)))
+  const hiddenTeams = await Promise.all(four.map((player) => player.evaluate(`({ host: Room.current.host, assignments: Room.current.teams.size, labels: document.querySelectorAll('#roomRoster .team-label').length, notice: document.getElementById('lobbyActions').textContent.includes('비밀 팀 배정 완료') })`)))
+  if (hiddenTeams.some((state) => state.labels !== 0 || !state.notice || !state.host && state.assignments !== 0) || hiddenTeams.find((state) => state.host)?.assignments !== 4) throw new Error('비밀 랜덤 팀 배정이 노출됐습니다: ' + JSON.stringify(hiddenTeams))
+  const balance = await a.evaluate(`Object.values(Object.fromEntries(Room.current.teams)).reduce((count, team) => ({ ...count, [team]: (count[team] || 0) + 1 }), {})`)
+  if (balance.red !== 2 || balance.blue !== 2) throw new Error('4인 랜덤 팀 균형 실패: ' + JSON.stringify(balance))
+  await a.evaluate(`document.querySelector('[data-act=room-manual-teams]').click()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamsHidden === false`, 12000)))
+  ok('랜덤 팀 → 2:2 균형 배정 · 시작 전 전원에게 팀 비공개')
   await a.call('Emulation.setDeviceMetricsOverride', { width: 393, height: 852, deviceScaleFactor: 3, mobile: true })
   await a.evaluate(`(() => {
     document.querySelector('[data-team-pid="${pids.A}"][data-team="red"]').click()
@@ -395,7 +410,7 @@ try {
   await Promise.all(four.map((player) => waitFor(player, `Room.current.teamBoards.red.length === 1 && Room.current.teamBoards.blue.length === 1 && !TW.busy`, 12000)))
   const activeOpponent = await a.evaluate(`document.querySelector('[data-team-board="blue"] .mini-tile.correct,[data-team-board="blue"] .mini-tile.present,[data-team-board="blue"] .mini-tile.absent') !== null`)
   if (!activeOpponent) throw new Error('팀전 진행 화면에서 상대 팀 색 보드가 보이지 않습니다')
-  await a.evaluate(`(() => { document.querySelector('[data-act=room-chat-toggle]').click(); const input = document.getElementById('roomChatInput'); input.value = '전체 채팅 테스트'; document.querySelector('[data-act=room-chat-send]').click() })()`)
+  await a.evaluate(`(() => { document.querySelector('[data-act=room-chat-toggle]').click(); document.querySelector('[data-chat-scope="all"]').click(); const input = document.getElementById('roomChatInput'); input.value = '전체 채팅 테스트'; document.querySelector('[data-act=room-chat-send]').click() })()`)
   await Promise.all(four.map((player) => waitFor(player, `Room.current.messages.some((message) => message.text === '전체 채팅 테스트')`)))
   await sleep(800)
   await a.evaluate(`(() => { document.querySelector('[data-chat-scope="team"]').click(); const input = document.getElementById('roomChatInput'); input.value = '빨강팀만 보여요'; document.querySelector('[data-act=room-chat-send]').click() })()`)
@@ -431,7 +446,7 @@ try {
         for (const jamo of Hangul.decompose(word)) TW.press(jamo)
         await TW.submit()
       })()`)
-      await Promise.all(four.map((page) => waitFor(page, `Room.current.teamBoards.${team}.length === ${row + 1} && !TW.busy`, 12000)))
+      await Promise.all(four.map((page) => waitFor(page, `Room.current.teamBoards.${team}.length === ${row + 1}${row === 4 ? '' : ' && !TW.busy'}`, 12000)))
     }
   }
   await Promise.all(four.map((player) => waitFor(player, `Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)]?.active && !document.getElementById('finalChance').hidden`, 12000)))
@@ -444,11 +459,81 @@ try {
   if (rateResult.winner !== 'red' || rateResult.red !== 1 || rateResult.blue !== .5 || !rateResult.text.includes('정답률 100%') || !rateResult.text.includes('정답률 50%') || rateResult.text.includes('5/5')) throw new Error('팀 마지막 기회 정답률 판정 실패: ' + JSON.stringify(rateResult))
   ok(`iPhone 15 첫 판/다시 하기 칸 크기 ${firstTeamTile}px/${rematchTile}px · 팀 마지막 기회 정답률 판정`)
 
-  const spyCode = await createMode('spy', 4)
-  for (const player of [c, d]) {
-    await player.evaluate(`(() => { TW.GOES.leave(); document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = '${player.name}'; document.getElementById('roomJoinCode').value = '${spyCode}'; document.querySelector('[data-act=room-join]').click() })()`)
+  const teamSetterCode = await createMode('teamsetter', 4)
+  for (const [index, player] of [c, d].entries()) {
+    await player.evaluate(`TW.GOES.leave()`)
+    await waitFor(player, `!document.getElementById('home').hidden`); await sleep(400)
+    await player.evaluate(`(() => { document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = '${player.name}'; document.getElementById('roomJoinCode').value = '${teamSetterCode}'; document.querySelector('[data-act=room-join]').click() })()`)
+    await waitFor(a, `Array.from(Room.current.peers.values()).filter((p) => p.online).length === ${index + 3}`, 20000)
   }
-  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'spy' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 12000)))
+  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'teamsetter' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 12000)))
+  const setterPids = Object.fromEntries(await Promise.all(four.map(async (player) => [player.name, await player.evaluate(`Room.current.me.pid`)])))
+  await a.evaluate(`(() => {
+    document.querySelector('[data-team-pid="${setterPids.A}"][data-team="red"]').click()
+    document.querySelector('[data-team-pid="${setterPids.B}"][data-team="blue"]').click()
+    document.querySelector('[data-team-pid="${setterPids.C}"][data-team="red"]').click()
+    document.querySelector('[data-team-pid="${setterPids.D}"][data-team="blue"]').click()
+    document.querySelector('[data-team-setter="${setterPids.A}"]').click()
+    document.querySelector('[data-team-setter="${setterPids.B}"]').click()
+  })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teams.get('${setterPids.A}') === 'red' && Room.current.teams.get('${setterPids.B}') === 'blue' && Room.current.teamSetters.red === '${setterPids.A}' && Room.current.teamSetters.blue === '${setterPids.B}'`, 12000)))
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
+  await Promise.all([waitFor(a, `document.getElementById('roomWord') !== null`, 12000), waitFor(b, `document.getElementById('roomWord') !== null`, 12000)])
+  const words = await a.evaluate(`Words.answers[4].slice(0, 2)`)
+  await a.evaluate(`(() => { const input = document.getElementById('roomWord'); input.value = '${words[0]}'; input.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('[data-act=room-word]').click() })()`)
+  await b.evaluate(`(() => { const input = document.getElementById('roomWord'); input.value = '${words[1]}'; input.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('[data-act=room-word]').click() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `TW.state?.mode === 'teamsetter' && !Room.current.over`, 12000)))
+  const teamSetterAnswers = await Promise.all(four.map((player) => player.evaluate(`({ team: Room.current.teams.get(Room.current.me.pid), answer: TW.state.answer, chatScope: Room.current.chatScope })`)))
+  if (teamSetterAnswers.some((state) => state.chatScope !== 'team') || new Set(teamSetterAnswers.filter((state) => state.team === 'red').map((state) => state.answer)).size !== 1 || new Set(teamSetterAnswers.filter((state) => state.team === 'blue').map((state) => state.answer)).size !== 1 || teamSetterAnswers.find((state) => state.team === 'red').answer === teamSetterAnswers.find((state) => state.team === 'blue').answer) throw new Error('팀 출제 대결의 서로 다른 정답/팀 채팅 기본값 실패: ' + JSON.stringify(teamSetterAnswers))
+  const teamSetterByPid = new Map()
+  for (const player of four) teamSetterByPid.set(await player.evaluate(`Room.current.me.pid`), player)
+  for (const team of ['red', 'blue']) {
+    const turnPid = await a.evaluate(`Room.current.teamTurns.${team}`)
+    await teamSetterByPid.get(turnPid).evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
+  }
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.over && document.querySelector('.team-score') !== null`, 12000)))
+  const twoWordsShown = await a.evaluate(`document.querySelector('.answer-reveal').textContent.includes('${words[0]}') && document.querySelector('.answer-reveal').textContent.includes('${words[1]}')`)
+  if (!twoWordsShown) throw new Error('팀 출제 대결 결과에 두 정답이 모두 보이지 않습니다')
+  ok('팀 출제 대결 → 팀별 출제자 · 상대 팀에 서로 다른 단어 · 팀 채팅 기본값 · 두 정답 공개')
+
+  const captainCode = await createMode('captain', 4)
+  for (const [index, player] of [c, d].entries()) {
+    await player.evaluate(`TW.GOES.leave()`)
+    await waitFor(player, `!document.getElementById('home').hidden`); await sleep(400)
+    await player.evaluate(`(() => { document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = '${player.name}'; document.getElementById('roomJoinCode').value = '${captainCode}'; document.querySelector('[data-act=room-join]').click() })()`)
+    await waitFor(a, `Array.from(Room.current.peers.values()).filter((p) => p.online).length === ${index + 3}`, 20000)
+  }
+  await waitFor(a, `Room.current?.kind === 'captain' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 20000)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'captain'`, 12000)))
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
+  await Promise.all(four.map((player) => waitFor(player, `TW.state?.mode === 'captain' && Room.current.captainAlive.length === 4`, 12000)))
+  for (const player of [a, b]) await player.evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
+  await waitFor(a, `Room.current.results.size >= 2`, 12000)
+  await a.evaluate(`(() => { document.getElementById('btnMenu').click(); document.querySelector('[data-act=room-force]').click() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.over && Room.current.captainAlive.length === 2 && Room.current.captainEliminated.length === 2`, 12000)))
+  const firstSurvivors = await a.evaluate(`({ alive: Room.current.captainAlive, eliminated: Room.current.captainEliminated, next: !!document.querySelector('[data-act=room-next]') })`)
+  if (!firstSurvivors.alive.includes(setterPids.A) || !firstSurvivors.alive.includes(setterPids.B) || firstSurvivors.eliminated.length !== 2 || !firstSurvivors.next) throw new Error('대장전 2명 탈락 처리 실패: ' + JSON.stringify(firstSurvivors))
+  await a.evaluate(`document.querySelector('[data-act=room-next]').click()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.round === 2 && !Room.current.over && Room.current.captainAlive.length === 2`, 12000)))
+  const eliminatedWatching = await Promise.all([c, d].map((player) => player.evaluate(`Room.current.me.role === 'spectator' && document.body.classList.contains('watching')`)))
+  if (eliminatedWatching.some((value) => !value)) throw new Error('대장전 탈락자가 다음 판에서 관전 상태가 아닙니다')
+  await a.evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
+  await waitFor(a, `Room.current.results.size >= 1`, 12000)
+  await a.evaluate(`(() => { document.getElementById('btnMenu').click(); document.querySelector('[data-act=room-force]').click() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.over && !!Room.current.captainChampion`, 12000)))
+  const champion = await a.evaluate(`({ pid: Room.current.captainChampion, title: document.querySelector('#sheetCard h2').textContent })`)
+  if (champion.pid !== setterPids.A || !champion.title.includes('최후의 대장')) throw new Error('대장전 최종 우승 처리 실패: ' + JSON.stringify(champion))
+  ok('대장전 → 매 판 꼴찌 2명 탈락 · 탈락자 관전 · 마지막 1명 우승')
+
+  const spyCode = await createMode('spy', 4)
+  for (const [index, player] of [c, d].entries()) {
+    await player.evaluate(`TW.GOES.leave()`)
+    await waitFor(player, `!document.getElementById('home').hidden`); await sleep(400)
+    await player.evaluate(`(() => { document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = '${player.name}'; document.getElementById('roomJoinCode').value = '${spyCode}'; document.querySelector('[data-act=room-join]').click() })()`)
+    await waitFor(a, `Array.from(Room.current.peers.values()).filter((p) => p.online).length === ${index + 3}`, 20000)
+  }
+  await waitFor(a, `Room.current?.kind === 'spy' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 20000)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'spy'`, 12000)))
   const spyPids = Object.fromEntries(await Promise.all(four.map(async (player) => [player.name, await player.evaluate(`Room.current.me.pid`)])))
   await a.evaluate(`(() => {
     document.querySelector('[data-team-pid="${spyPids.A}"][data-team="red"]').click()
@@ -465,18 +550,30 @@ try {
     if (!spyPage || !await spyPage.evaluate(`document.querySelector('#sheetCard h2').textContent.includes('당신은 스파이')`)) throw new Error(`${team} 팀 스파이 비밀 안내 실패`)
   }
   await Promise.all(four.map((player) => player.evaluate(`document.querySelector('[data-close]').click()`)))
-  const redTurn = await a.evaluate(`Room.current.teamTurns.red`); const blueTurn = await a.evaluate(`Room.current.teamTurns.blue`)
-  await spyPages.get(redTurn).evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
-  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamStatus.red === 'won'`, 12000)))
-  await spyPages.get(blueTurn).evaluate(`(async () => { const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer); for (const jamo of Hangul.decompose(word)) TW.press(jamo); await TW.submit() })()`)
-  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamBoards.blue.length === 1 && !TW.busy`, 12000)))
-  const nextBlue = await a.evaluate(`Room.current.teamTurns.blue`)
-  await spyPages.get(nextBlue).evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
+  for (let row = 0; row < 5; row++) {
+    for (const team of ['red', 'blue']) {
+      const turnPid = await a.evaluate(`Room.current.teamTurns.${team}`)
+      if (row === 4 && turnPid === spies[team]) throw new Error(`${team} 팀의 마지막 정규 차례가 스파이에게 배정됐습니다`)
+      await spyPages.get(turnPid).evaluate(`(async () => { const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer); for (const jamo of Hangul.decompose(word)) TW.press(jamo); await TW.submit() })()`)
+      await Promise.all(four.map((player) => waitFor(player, `Room.current.teamBoards.${team}.length === ${row + 1}${row === 4 ? '' : ' && !TW.busy'}`, 12000)))
+    }
+  }
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)]?.active`, 12000)))
+  const spyFinalViews = await Promise.all(four.map((player) => player.evaluate(`({ spy: Room.current.isSpy, hidden: document.getElementById('finalChance').hidden, unlimited: Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)].unlimited, endsAt: Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)].endsAt })`)))
+  if (spyFinalViews.some((view) => !view.unlimited || view.endsAt !== null || view.spy && !view.hidden || !view.spy && view.hidden)) throw new Error('스파이 제외/무제한 마지막 기회 표시 실패: ' + JSON.stringify(spyFinalViews))
+  const citizens = {}
+  for (const team of ['red', 'blue']) {
+    const pid = await a.evaluate(`Room.current.participants.find((pid) => Room.current.teams.get(pid) === '${team}' && pid !== Room.current.spies.${team})`)
+    citizens[team] = spyPages.get(pid)
+  }
+  await citizens.red.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = TW.state.answer; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
+  await citizens.blue.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = Words.answers[TW.state.size].find((word) => word !== TW.state.answer); input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
   await Promise.all(four.map((player) => waitFor(player, `Room.current.over && document.querySelector('.team-score') !== null`, 12000)))
   const blueSpyTitle = await spyPages.get(spies.blue).evaluate(`document.querySelector('#sheetCard h2').textContent`)
   const redSpyTitle = await spyPages.get(spies.red).evaluate(`document.querySelector('#sheetCard h2').textContent`)
-  if (!blueSpyTitle.includes('스파이 개인 승리') || !redSpyTitle.includes('스파이 작전 실패')) throw new Error('스파이 개인 승패 처리 실패: ' + JSON.stringify({ blueSpyTitle, redSpyTitle }))
-  ok('스파이전 → 팀별 비밀 스파이 한 명 · 잠입 팀 패배 시 개인 승리')
+  const spyRate = await a.evaluate(`({ winner: Room.current.teamWinner, red: Room.current.teamResult.find((r) => r.team === 'red'), blue: Room.current.teamResult.find((r) => r.team === 'blue') })`)
+  if (spyRate.winner !== 'red' || spyRate.red.total !== 1 || spyRate.blue.total !== 1 || !blueSpyTitle.includes('스파이 개인 승리') || !redSpyTitle.includes('스파이 작전 실패')) throw new Error('스파이 개인 승패/일반 팀원 정답률 처리 실패: ' + JSON.stringify({ blueSpyTitle, redSpyTitle, spyRate }))
+  ok('스파이전 → 마지막 정규 차례 스파이 제외 · 스파이는 마지막 기회 제외 · 일반 팀원 정답률 · 무제한 진행')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

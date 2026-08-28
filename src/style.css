@@ -111,6 +111,9 @@ h1, h2, h3, p { margin: 0; }
 .room-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .room-mode-grid .btn { padding: 11px 8px; font-size: 13px; }
 .room-mode-grid .btn[aria-pressed="true"] { background: var(--correct); color: var(--ink-on); }
+.room-category-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.room-category-grid .btn[aria-pressed="true"] { background: var(--correct); color: var(--ink-on); }
+.room-mode-step { margin-top: 18px; }
 .spy-title { color: #ffb45b; }
 .spy-mission { margin: 18px 0 4px; padding: 18px; border: 1px solid rgba(255,180,91,.5); border-radius: 12px; background: rgba(255,180,91,.08); text-align: center; line-height: 1.6; }
 .spy-mission b { color: #ffb45b; font-size: 18px; }

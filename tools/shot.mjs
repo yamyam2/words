@@ -162,9 +162,12 @@ try {
   console.log('\n[1] 시작 화면')
   await goto(PAGE_URL)
   await evaluate(DRIVE)
+  const rootMenu = await evaluate(`({ labels: [...document.querySelectorAll('#homeRootMenu .btn')].filter((button) => !button.hidden).map((button) => button.textContent.trim()), singleHidden: document.getElementById('singleMenu').hidden })`)
+  eq('첫 화면은 싱글/멀티 단계만 표시', rootMenu, { labels: ['싱글 모드'], singleHidden: true })
+  await evaluate(`document.querySelector('[data-go="single-menu"]').click()`)
   const layout = await evaluate(`({ vw: innerWidth, doc: document.documentElement.scrollWidth,
     sizes: Math.round(document.querySelector('.sizes').getBoundingClientRect().width),
-    sizeRows: new Set([...document.querySelectorAll('.chip')].map(c => Math.round(c.getBoundingClientRect().top))).size })`)
+    sizeRows: new Set([...document.querySelectorAll('#sizePicker .chip')].map(c => Math.round(c.getBoundingClientRect().top))).size })`)
   eq('가로 오버플로 없음', layout.doc, layout.vw)
   eq('칸수 칩이 한 줄에 들어감', layout.sizeRows, 1)
   const offlineRoom = await evaluate(`({ button: document.querySelector('[data-go=rooms]') !== null,

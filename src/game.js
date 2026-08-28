@@ -24,7 +24,7 @@
   const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '⬜' }
   const MODE_LABEL = {
     daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제',
-    versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동', team: '팀전',
+    versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동', team: '팀전', spy: '스파이전',
   }
 
   const $ = (sel) => document.querySelector(sel)
@@ -198,6 +198,13 @@
     const lobby = $('#lobby')
     if (lobby) lobby.hidden = true
     el.home.hidden = false
+    $('#homeRootMenu').hidden = false
+    $('#singleMenu').hidden = true
+    paintSizePicker()
+  }
+  function showSingleMenu() {
+    $('#homeRootMenu').hidden = true
+    $('#singleMenu').hidden = false
     paintSizePicker()
   }
   function showGame() {
@@ -218,7 +225,7 @@
       : `${state.size}칸 · ${state.maxTries}번 안에`
     buildBoard()
     buildKeyboard()
-    fitBoard()
+    scheduleFitBoard()
     paint()
     if (state.status !== 'playing') finish(true)
   }
@@ -243,6 +250,7 @@
   // 타일은 정사각형이라 보드 폭이 곧 보드 높이를 정한다. 남은 가로·세로 공간 중
   // 빠듯한 쪽에 맞춰 타일 한 변을 정하고, 그만큼만 보드에 준다.
   const TILE_MAX = 68
+  const ROOM_TILE_MAX = 60
   const TILE_MIN = 24
   const GAP = 6
   function fitBoard() {
@@ -255,16 +263,27 @@
     // 브라우저가 그 값을 버리고 직전 판의 폭이 그대로 남아 보드가 어긋난다.
     if (!(availWidth > 0 && availHeight > 0)) return
     const tile = Math.max(TILE_MIN, Math.min(
-      TILE_MAX,
+      state.room ? ROOM_TILE_MAX : TILE_MAX,
       (availWidth - GAP * (state.size - 1)) / state.size,
       (availHeight - GAP * (state.maxTries - 1)) / state.maxTries,
     ))
     el.board.style.width = Math.floor(tile * state.size + GAP * (state.size - 1)) + 'px'
   }
+  let fitTimer = null
+  function scheduleFitBoard() {
+    cancelAnimationFrame(scheduleFitBoard.raf || 0)
+    scheduleFitBoard.raf = requestAnimationFrame(() => {
+      fitBoard()
+      requestAnimationFrame(fitBoard)
+    })
+    clearTimeout(fitTimer)
+    fitTimer = setTimeout(fitBoard, 240)
+  }
   // 남은 공간이 바뀌면 언제든 다시 맞춘다 — 모바일 주소창이 접히거나, 결과 바가 뜨거나,
   // 화면을 돌리거나, 화면 전환 직후 레이아웃이 늦게 잡히는 경우까지 한 번에 덮는다.
-  if (typeof ResizeObserver === 'function') new ResizeObserver(fitBoard).observe(el.board.parentElement)
-  else addEventListener('resize', fitBoard)
+  if (typeof ResizeObserver === 'function') new ResizeObserver(scheduleFitBoard).observe(el.board.parentElement)
+  addEventListener('resize', scheduleFitBoard)
+  globalThis.visualViewport?.addEventListener('resize', scheduleFitBoard)
 
   function buildKeyboard() {
     el.keyboard.innerHTML = ''
@@ -701,6 +720,7 @@
   // 다른 기능 파일이 화면 이동과 액션을 자기 키로 등록할 수 있는 작은 확장점.
   const GOES = {
     home: showHome,
+    'single-menu': showSingleMenu,
     again: () => startGame(state.mode === 'custom' ? 'free' : state.mode, resolveSize()),
     daily: () => startGame('daily', resolveSize()),
     free: () => startGame('free', resolveSize()),
@@ -789,7 +809,7 @@
     get busy() { return busy },
     shareText, shareUrl, freeAnswer, resolveSize,
     SHEETS, GOES, ACTIONS, openSheet, closeSheet, toast, store, isValid, b64url,
-    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn,
+    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn, refitBoard: scheduleFitBoard,
     repaint: () => { if (state) paint() },
     restoreRoomGame: (guesses, status = 'playing') => {
       if (!state || !state.room) return

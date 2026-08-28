@@ -107,7 +107,7 @@ async function newPlayer(name, url = PAGE_URL) {
     if (await evaluate('document.readyState === "complete" && !!globalThis.Room').catch(() => false)) break
     await sleep(100)
   }
-  return { name, browserContextId, evaluate }
+  return { name, browserContextId, evaluate, call }
 }
 async function waitFor(player, expression, timeout = 8000) {
   const until = Date.now() + timeout
@@ -123,10 +123,12 @@ let players = []
 try {
   const a = await newPlayer('A')
   players.push(a)
+  const rootModes = await a.evaluate(`[...document.querySelectorAll('#homeRootMenu .btn')].filter((button) => !button.hidden).map((button) => button.textContent.trim())`)
+  if (rootModes.join(',') !== '싱글 모드,멀티 모드') throw new Error('첫 화면 2단계 메뉴 실패: ' + JSON.stringify(rootModes))
   await a.evaluate(`(() => {
     document.querySelector('[data-go=rooms]').click()
     document.getElementById('roomNick').value = 'A'
-    document.querySelector('[data-act=room-open-create]').click()
+    document.querySelector('[data-room-new=versus]').click()
     document.querySelector('[data-act=room-create]').click()
   })()`)
   await waitFor(a, `!document.getElementById('lobby').hidden && document.getElementById('roomCode').textContent.length === 6`)
@@ -185,8 +187,7 @@ try {
     await a.evaluate(`(() => {
       document.querySelector('[data-go=rooms]').click()
       document.getElementById('roomNick').value = 'A'
-      document.querySelector('[data-act=room-open-create]').click()
-      document.querySelector('[data-rmode="${kind}"]').click()
+      document.querySelector('[data-room-new="${kind}"]').click()
       document.querySelector('[data-rsize="${size}"]').click()
       ${kind === 'relay' ? `document.querySelector('[data-rounds="${rounds}"]').click()` : ''}
       document.querySelector('[data-act=room-create]').click()
@@ -328,7 +329,7 @@ try {
   await b.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = Words.answers[TW.state.size].filter((word) => word !== TW.state.answer)[9]; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
   await Promise.all([a, b, c].map((player) => waitFor(player, `Room.current.coopResult?.winnerPid && document.querySelector('.answer-reveal')?.textContent.includes(TW.state.answer)`)))
   const finalWinner = await a.evaluate(`({ pid: Room.current.coopResult.winnerPid, ranking: Room.current.coopResult.finalResults.filter((result) => result.status === 'won').sort((x, y) => x.ms - y.ms).map((result) => result.pid), name: document.querySelector('#sheetCard h2').textContent, text: document.querySelector('#sheetCard').textContent, rows: TW.state.guesses.length })`)
-  if (finalWinner.pid !== cPid || finalWinner.ranking.join(',') !== [cPid, aPid].join(',') || !finalWinner.name.includes('C') || !finalWinner.text.includes('오답') || finalWinner.rows !== 5) throw new Error('협동 마지막 기회 시간 순위 처리 실패: ' + JSON.stringify(finalWinner))
+  if (finalWinner.pid !== cPid || finalWinner.ranking.join(',') !== [cPid, aPid].join(',') || !finalWinner.name.includes('C') || !finalWinner.text.includes('오답') || !finalWinner.text.includes('정규 5회 실패 후 마지막 기회') || finalWinner.text.includes('5/5') || finalWinner.rows !== 5) throw new Error('협동 마지막 기회 시간 순위 처리 실패: ' + JSON.stringify(finalWinner))
   const wrongPlayerButton = await b.evaluate(`(() => { Room.current.readyVoters = new Set(['${aPid}']); TW.openSheet('scoreboard'); return document.querySelector('[data-act=room-again]')?.textContent || '' })()`)
   if (!wrongPlayerButton.includes('한 번 더')) throw new Error('Presence 명단에서 잠시 빠진 오답자에게 한 번 더 버튼이 보이지 않습니다: ' + wrongPlayerButton)
   ok('협동 5회 실패 → 첫 정답 뒤 전원 대기 · 정답자 제출 시간 순위')
@@ -373,6 +374,7 @@ try {
   const four = [a, b, c, d]
   await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'team' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 12000)))
   const pids = Object.fromEntries(await Promise.all(four.map(async (player) => [player.name, await player.evaluate(`Room.current.me.pid`)])))
+  await a.call('Emulation.setDeviceMetricsOverride', { width: 393, height: 852, deviceScaleFactor: 3, mobile: true })
   await a.evaluate(`(() => {
     document.querySelector('[data-team-pid="${pids.A}"][data-team="red"]').click()
     document.querySelector('[data-team-pid="${pids.B}"][data-team="blue"]').click()
@@ -381,6 +383,9 @@ try {
     document.querySelector('[data-act=room-start]').click()
   })()`)
   await Promise.all(four.map((player) => waitFor(player, `TW.state?.mode === 'team' && !Room.current.over`, 12000)))
+  await sleep(500)
+  const firstTeamTile = await a.evaluate(`Math.round(document.querySelector('#board .tile').getBoundingClientRect().width)`)
+  if (firstTeamTile > 60) throw new Error('iPhone 첫 팀전의 단어 칸이 너무 큽니다: ' + firstTeamTile)
   for (const player of [a, b]) {
     await player.evaluate(`(async () => {
       const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer)
@@ -407,6 +412,72 @@ try {
   const teamResult = await a.evaluate(`({ winner: Room.current.teamResult[0].team, colors: document.querySelectorAll('.team-score li').length, answerShown: document.querySelector('.answer-reveal').textContent.includes(TW.state.answer) })`)
   if (teamResult.winner !== 'red' || teamResult.colors !== 2 || !teamResult.answerShown) throw new Error('팀전 결과 처리 실패: ' + JSON.stringify(teamResult))
   ok('팀전 2:2 → 팀별 공유 턴 · 전체/팀 채팅 · 관전 중 상대 색 보드 · 시간 순위')
+
+  await Promise.all(four.map((player) => player.evaluate(`document.querySelector('[data-act=room-again]').click()`)))
+  await Promise.all(four.map((player) => waitFor(player, `!Room.current.startedAt && !Room.current.over && !document.getElementById('lobby').hidden`, 12000)))
+  await a.evaluate(`document.querySelector('[data-act=room-start]').click()`)
+  await Promise.all(four.map((player) => waitFor(player, `TW.state?.mode === 'team' && !Room.current.over`, 12000)))
+  await sleep(500)
+  const rematchTile = await a.evaluate(`Math.round(document.querySelector('#board .tile').getBoundingClientRect().width)`)
+  if (rematchTile > 60 || Math.abs(rematchTile - firstTeamTile) > 2) throw new Error(`iPhone 팀전 첫 판/다시 하기 칸 크기가 다릅니다: ${firstTeamTile} / ${rematchTile}`)
+  const fourByPid = new Map()
+  for (const player of four) fourByPid.set(await player.evaluate(`Room.current.me.pid`), player)
+  for (let row = 0; row < 5; row++) {
+    for (const team of ['red', 'blue']) {
+      const turnPid = await a.evaluate(`Room.current.teamTurns.${team}`)
+      const player = fourByPid.get(turnPid)
+      if (!player) throw new Error('팀 마지막 기회 전 차례 참가자를 찾지 못했습니다: ' + turnPid)
+      await player.evaluate(`(async () => {
+        const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer)
+        for (const jamo of Hangul.decompose(word)) TW.press(jamo)
+        await TW.submit()
+      })()`)
+      await Promise.all(four.map((page) => waitFor(page, `Room.current.teamBoards.${team}.length === ${row + 1} && !TW.busy`, 12000)))
+    }
+  }
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)]?.active && !document.getElementById('finalChance').hidden`, 12000)))
+  for (const player of [a, c, b]) {
+    await player.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = TW.state.answer; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
+  }
+  await d.evaluate(`(() => { const input = document.getElementById('finalWord'); input.value = Words.answers[TW.state.size].find((word) => word !== TW.state.answer); input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('finalSubmit').click() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.over && document.querySelector('.team-score') !== null`, 12000)))
+  const rateResult = await a.evaluate(`({ winner: Room.current.teamWinner, red: Room.current.teamResult.find((r) => r.team === 'red').accuracy, blue: Room.current.teamResult.find((r) => r.team === 'blue').accuracy, text: document.querySelector('#sheetCard').textContent })`)
+  if (rateResult.winner !== 'red' || rateResult.red !== 1 || rateResult.blue !== .5 || !rateResult.text.includes('정답률 100%') || !rateResult.text.includes('정답률 50%') || rateResult.text.includes('5/5')) throw new Error('팀 마지막 기회 정답률 판정 실패: ' + JSON.stringify(rateResult))
+  ok(`iPhone 15 첫 판/다시 하기 칸 크기 ${firstTeamTile}px/${rematchTile}px · 팀 마지막 기회 정답률 판정`)
+
+  const spyCode = await createMode('spy', 4)
+  for (const player of [c, d]) {
+    await player.evaluate(`(() => { TW.GOES.leave(); document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = '${player.name}'; document.getElementById('roomJoinCode').value = '${spyCode}'; document.querySelector('[data-act=room-join]').click() })()`)
+  }
+  await Promise.all(four.map((player) => waitFor(player, `Room.current?.kind === 'spy' && Array.from(Room.current.peers.values()).filter((p) => p.online).length === 4`, 12000)))
+  const spyPids = Object.fromEntries(await Promise.all(four.map(async (player) => [player.name, await player.evaluate(`Room.current.me.pid`)])))
+  await a.evaluate(`(() => {
+    document.querySelector('[data-team-pid="${spyPids.A}"][data-team="red"]').click()
+    document.querySelector('[data-team-pid="${spyPids.B}"][data-team="blue"]').click()
+    document.querySelector('[data-team-pid="${spyPids.C}"][data-team="red"]').click()
+    document.querySelector('[data-team-pid="${spyPids.D}"][data-team="blue"]').click()
+    document.querySelector('[data-act=room-start]').click()
+  })()`)
+  await Promise.all(four.map((player) => waitFor(player, `TW.state?.mode === 'spy' && document.querySelector('#sheetCard h2') !== null`, 12000)))
+  const spies = await a.evaluate(`Room.current.spies`)
+  const spyPages = new Map(await Promise.all(four.map(async (player) => [await player.evaluate(`Room.current.me.pid`), player])))
+  for (const team of ['red', 'blue']) {
+    const spyPage = spyPages.get(spies[team])
+    if (!spyPage || !await spyPage.evaluate(`document.querySelector('#sheetCard h2').textContent.includes('당신은 스파이')`)) throw new Error(`${team} 팀 스파이 비밀 안내 실패`)
+  }
+  await Promise.all(four.map((player) => player.evaluate(`document.querySelector('[data-close]').click()`)))
+  const redTurn = await a.evaluate(`Room.current.teamTurns.red`); const blueTurn = await a.evaluate(`Room.current.teamTurns.blue`)
+  await spyPages.get(redTurn).evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamStatus.red === 'won'`, 12000)))
+  await spyPages.get(blueTurn).evaluate(`(async () => { const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer); for (const jamo of Hangul.decompose(word)) TW.press(jamo); await TW.submit() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.teamBoards.blue.length === 1 && !TW.busy`, 12000)))
+  const nextBlue = await a.evaluate(`Room.current.teamTurns.blue`)
+  await spyPages.get(nextBlue).evaluate(`(async () => { for (const jamo of TW.state.answerJamo) TW.press(jamo); await TW.submit() })()`)
+  await Promise.all(four.map((player) => waitFor(player, `Room.current.over && document.querySelector('.team-score') !== null`, 12000)))
+  const blueSpyTitle = await spyPages.get(spies.blue).evaluate(`document.querySelector('#sheetCard h2').textContent`)
+  const redSpyTitle = await spyPages.get(spies.red).evaluate(`document.querySelector('#sheetCard h2').textContent`)
+  if (!blueSpyTitle.includes('스파이 개인 승리') || !redSpyTitle.includes('스파이 작전 실패')) throw new Error('스파이 개인 승패 처리 실패: ' + JSON.stringify({ blueSpyTitle, redSpyTitle }))
+  ok('스파이전 → 팀별 비밀 스파이 한 명 · 잠입 팀 패배 시 개인 승리')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

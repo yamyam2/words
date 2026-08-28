@@ -18,19 +18,25 @@
     <h1 class="logo">오늘의 단어</h1>
     <p class="tagline">자음·모음을 한 칸씩 채워서<br>다섯 번 안에 단어를 맞혀보세요</p>
 
-    <div class="sizes" id="sizePicker" role="group" aria-label="칸 수 선택">
-      <button class="chip" data-size="4">4칸</button>
-      <button class="chip" data-size="5">5칸</button>
-      <button class="chip" data-size="6">6칸</button>
-      <button class="chip" data-size="7">7칸</button>
-      <button class="chip" data-size="0">랜덤</button>
+    <div class="menu" id="homeRootMenu">
+      <button class="btn primary" data-go="single-menu">싱글 모드</button>
+      <button class="btn accent" data-go="rooms" id="btnRooms" hidden>멀티 모드</button>
     </div>
 
-    <div class="menu">
-      <button class="btn primary" data-go="daily">오늘의 문제</button>
-      <button class="btn" data-go="free">무한 연습</button>
-      <button class="btn ghost" data-go="compose">직접 출제하기</button>
-      <button class="btn accent" data-go="rooms" id="btnRooms" hidden>같이 하기</button>
+    <div class="home-mode-panel" id="singleMenu" hidden>
+      <div class="sizes" id="sizePicker" role="group" aria-label="칸 수 선택">
+        <button class="chip" data-size="4">4칸</button>
+        <button class="chip" data-size="5">5칸</button>
+        <button class="chip" data-size="6">6칸</button>
+        <button class="chip" data-size="7">7칸</button>
+        <button class="chip" data-size="0">랜덤</button>
+      </div>
+      <div class="menu">
+        <button class="btn primary" data-go="daily">오늘의 문제</button>
+        <button class="btn" data-go="free">무한 연습</button>
+        <button class="btn ghost" data-go="compose">직접 출제하기</button>
+        <button class="textlink" data-go="home">처음 메뉴로</button>
+      </div>
     </div>
 
     <div class="home-links">

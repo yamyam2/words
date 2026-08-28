@@ -22,7 +22,8 @@ const env = {
   ),
   ...process.env,
 }
-const CONFIG = { url: env.TW_SUPABASE_URL || '', key: env.TW_SUPABASE_KEY || '' }
+const offline = process.argv.includes('--offline')
+const CONFIG = offline ? { url: '', key: '' } : { url: env.TW_SUPABASE_URL || '', key: env.TW_SUPABASE_KEY || '' }
 
 let html = src('index.html')
   .replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, f) => `<style>\n${src(f).trim()}\n</style>`)

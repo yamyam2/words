@@ -1,14 +1,16 @@
-// 네 가지 멀티플레이 모드의 방 UI와 상태 기계. 네트워크 세부사항은 Net 에만 맡긴다.
+// 멀티플레이 모드의 방 UI와 상태 기계. 네트워크 세부사항은 Net 에만 맡긴다.
 ;(function () {
   'use strict'
   const Net = globalThis.Net
   const TW = globalThis.TW
   const H = globalThis.Hangul
+  const W = globalThis.Words
   const $ = (s) => document.querySelector(s)
   const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   const TO_WIRE = { absent: '0', present: '1', correct: '2' }
   const FROM_WIRE = ['absent', 'present', 'correct']
-  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동' }
+  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '릴레이', coop: '협동', team: '팀전' }
+  const TEAM_NAMES = { red: '빨강팀', blue: '파랑팀' }
   const QUICK_MESSAGES = ['ㅋㅋㅋ', '화이팅!', '오 거의 다 왔다!', '천천히 해도 돼']
   let room = null
   let draft = { kind: 'versus', size: 5, roundsTotal: 1, waitSeconds: 60 }
@@ -17,6 +19,9 @@
   let skipTimer = null
   let waitTimer = null
   let finalTimer = null
+  let teamEndTimer = null
+  const teamFinalTimers = { red: null, blue: null }
+  const teamSkipTimers = { red: null, blue: null }
   let lastBlocked = 0
 
   function makePid() {
@@ -75,8 +80,8 @@
     <div class="room-options">${Object.entries(MODES).map(([k, label]) => `<button class="chip" data-rmode="${k}" aria-pressed="${draft.kind === k}">${label}</button>`).join('')}</div>
     <p><b>칸 수</b></p><div class="room-options">${[4, 5, 6, 7, 0].map((n) => `<button class="chip" data-rsize="${n}" aria-pressed="${draft.size === n}">${n || '랜덤'}${n ? '칸' : ''}</button>`).join('')}</div>
     <div ${draft.kind === 'relay' ? '' : 'hidden'}><p><b>라운드</b></p><div class="room-options">${[1, 3, 5].map((n) => `<button class="chip" data-rounds="${n}" aria-pressed="${draft.roundsTotal === n}">${n}라운드</button>`).join('')}</div></div>
-    <div ${draft.kind === 'coop' ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
-    <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '라운드 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
+    <div ${['coop', 'team'].includes(draft.kind) ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
+    <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '라운드 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : draft.kind === 'team' ? '두 팀이 각자의 공유 보드로 같은 단어를 풉니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
     <div class="sheet-actions"><button class="btn primary" data-act="room-create">방 만들기</button></div>`
   TW.SHEETS.roommenu = () => {
     if (!room) return '<h2>방을 찾지 못했어요</h2>'
@@ -111,6 +116,8 @@
     'room-standings': showStandings, 'room-force': forceRound,
     'room-copy': () => TW.copyAndTell(inviteText(), TW.shareUrl() ? '초대 링크를 복사했어요' : '방 코드를 복사했어요'),
     'room-copy-result': copyResult, 'room-word': submitSetterWord, 'room-final-submit': submitFinalWord,
+    'room-chat-toggle': () => { if (room) { room.chatOpen = !room.chatOpen; renderQuickChat(); if (room.chatOpen) setTimeout(() => $('#roomChatInput')?.focus(), 0) } },
+    'room-chat-send': () => sendChat($('#roomChatInput')?.value, room?.chatScope),
   })
   function readNick() {
     const input = $('#roomNick')
@@ -134,17 +141,21 @@
     const list = orderedPlayers().filter((p) => p.online)
     const names = displayNames()
     const choose = room.host && room.kind === 'setter' && !room.startedAt
+    const chooseTeam = room.host && room.kind === 'team' && !room.startedAt
     $('#roomCount').textContent = `${list.length}명`
     $('#roomRoster').innerHTML = list.map((p) => {
       const selected = p.pid === room.setterPid
       const role = room.kind === 'setter' && selected ? '출제자' : p.pid === room.hostPid ? '방장' : '참가자'
       const pick = choose ? `<button class="setter-pick" data-setter="${esc(p.pid)}" aria-pressed="${selected}">${selected ? '선택됨' : '출제자로 선택'}</button>` : ''
-      return `<li><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b><span>${role}</span>${pick}</li>`
+      const team = room.teams.get(p.pid) || 'red'
+      const teamPick = chooseTeam ? `<span class="team-picks"><button data-team-pid="${esc(p.pid)}" data-team="red" aria-pressed="${team === 'red'}">빨강</button><button data-team-pid="${esc(p.pid)}" data-team="blue" aria-pressed="${team === 'blue'}">파랑</button></span>` : ''
+      const teamRole = room.kind === 'team' ? `<em class="team-label ${team}">${TEAM_NAMES[team]}</em>` : ''
+      return `<li><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b>${teamRole}<span>${role}</span>${pick}${teamPick}</li>`
     }).join('')
     const wait = room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
     const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : ''}${wait}`
     $('#lobbyActions').innerHTML = room.host
-      ? `<p class="muted">${detail}${choose ? '<br>아래에서 출제자를 선택한 뒤 시작하세요.' : ''}</p><button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
+      ? `<p class="muted">${detail}${choose ? '<br>아래에서 출제자를 선택한 뒤 시작하세요.' : chooseTeam ? '<br>참가자를 두 팀으로 나눈 뒤 시작하세요.' : ''}</p><button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
       : `<p class="muted">${detail}<br>방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
     $('#lobbyStatus').textContent = ({ off: '오프라인', connecting: '연결하는 중…', live: '연결됨', retry: '다시 연결하는 중…', down: '연결을 기다리는 중…' })[Net.status] || Net.status
   }
@@ -162,7 +173,9 @@
       startedAt: null, answer: null, over: false, final: false, scoreResults: [],
       setterPid: resume?.setterPid || me.pid, turnPid: resume?.turnPid || null, pick: null, resume: resume || null,
       waitEndsAt: null, coopPending: false, finalChance: null, maxTries: TW.MAX_TRIES,
-      readyPids: new Set(), readyVoters: new Set(), resultSheet: 'scoreboard',
+      readyPids: new Set(), readyVoters: new Set(), resultSheet: 'scoreboard', messages: [], chatOpen: false, chatScope: 'all', lastChatAt: 0,
+      teams: new Map(), teamBoards: { red: [], blue: [] }, teamTurns: { red: null, blue: null }, teamStatus: { red: 'waiting', blue: 'waiting' },
+      teamMaxTries: { red: TW.MAX_TRIES, blue: TW.MAX_TRIES }, teamFinishMs: { red: null, blue: null }, teamFinals: { red: null, blue: null }, teamPending: false, teamDeadline: null, teamResult: null,
     }
     globalThis.TWRoomHash = null
     persistRoom(); showLobby()
@@ -170,7 +183,9 @@
   }
   function leaveRoom() {
     clearInterval(timer); clearTimeout(nextTimer); clearTimeout(skipTimer); clearTimeout(waitTimer); clearTimeout(finalTimer)
+    clearTimeout(teamEndTimer); clearTimeout(teamFinalTimers.red); clearTimeout(teamFinalTimers.blue); clearTimeout(teamSkipTimers.red); clearTimeout(teamSkipTimers.blue)
     timer = nextTimer = skipTimer = waitTimer = finalTimer = null
+    teamEndTimer = teamFinalTimers.red = teamFinalTimers.blue = teamSkipTimers.red = teamSkipTimers.blue = null
     Net.leave(); room = null; TW.store.set('tw.room.v1', null)
     document.body.classList.remove('watching')
     $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#finalChance').hidden = true
@@ -178,7 +193,8 @@
     TW.GOES.home()
   }
 
-  function lobbyPayload() { return { kind: room.kind, size: room.size, roundsTotal: room.roundsTotal, setterPid: room.setterPid, waitSeconds: room.waitSeconds } }
+  function teamsObject() { return Object.fromEntries(room?.teams || []) }
+  function lobbyPayload() { return { kind: room.kind, size: room.size, roundsTotal: room.roundsTotal, setterPid: room.setterPid, waitSeconds: room.waitSeconds, teams: teamsObject() } }
   function broadcastLobby() {
     if (room?.host && !room.startedAt && Net.status === 'live') Net.send('lobby', lobbyPayload())
   }
@@ -190,7 +206,20 @@
     room.roundsTotal = payload.kind === 'relay' && [1, 3, 5].includes(rounds) ? rounds : 1
     room.waitSeconds = [0, 30, 60, 90].includes(Number(payload.waitSeconds)) ? Number(payload.waitSeconds) : 60
     room.setterPid = String(payload.setterPid || room.hostPid || '')
+    if (payload.kind === 'team') room.teams = new Map(Object.entries(payload.teams || {}).filter(([, team]) => team === 'red' || team === 'blue'))
     renderLobby(); persistRoom()
+  }
+  function balanceTeams() {
+    if (!room?.host || room.kind !== 'team' || room.startedAt) return
+    const online = onlinePlayers()
+    const ids = new Set(online.map((p) => p.pid))
+    for (const pid of room.teams.keys()) if (!ids.has(pid)) room.teams.delete(pid)
+    for (const player of online) {
+      if (room.teams.has(player.pid)) continue
+      const red = Array.from(room.teams.values()).filter((team) => team === 'red').length
+      const blue = room.teams.size - red
+      room.teams.set(player.pid, red <= blue ? 'red' : 'blue')
+    }
   }
   function onRoster(roster) {
     if (!room) return
@@ -203,12 +232,14 @@
     for (const p of room.peers.values()) p.online = online.has(p.pid)
     room.hostPid = Net.electHost(roster); room.host = room.hostPid === room.me.pid
     if (!room.setterPid || !room.peers.get(room.setterPid)?.online) room.setterPid = room.hostPid
+    balanceTeams()
     renderLobby(); renderPeers(); renderBanner()
     if (!room.startedAt) {
       if (room.host) broadcastLobby()
       else if (Net.status === 'live') Net.send('sync?', { pid: room.me.pid })
     }
     if (room.kind === 'coop' && room.startedAt && !room.over) scheduleTurnSkip()
+    if (room.kind === 'team' && room.startedAt && !room.over) scheduleTeamSkips()
     if (room.host && room.finalChance?.active && !room.over) {
       clearTimeout(finalTimer)
       finalTimer = setTimeout(finishFinalChance, Math.max(0, room.finalChance.endsAt - Date.now()))
@@ -216,6 +247,13 @@
     if (room.host && room.waitEndsAt && !room.over) {
       clearTimeout(waitTimer)
       waitTimer = setTimeout(forceRound, Math.max(0, room.waitEndsAt - Date.now()))
+    }
+    if (room.host && room.kind === 'team' && !room.over) {
+      for (const team of ['red', 'blue']) {
+        const final = room.teamFinals[team]
+        if (final?.active) { clearTimeout(teamFinalTimers[team]); teamFinalTimers[team] = setTimeout(() => finishTeamFinal(team), Math.max(0, final.endsAt - Date.now())) }
+      }
+      if (room.teamDeadline) { clearTimeout(teamEndTimer); teamEndTimer = setTimeout(forceTeamDeadline, Math.max(0, room.teamDeadline.endsAt - Date.now())) }
     }
     if (room.host && room.over) publishReadyState()
   }
@@ -242,6 +280,20 @@
     if (!room?.host) return
     const participants = roundParticipants(setterPid)
     if (!participants.length) return TW.toast('플레이할 참가자가 없어요')
+    if (room.kind === 'team') {
+      balanceTeams()
+      const red = participants.filter((pid) => room.teams.get(pid) === 'red')
+      const blue = participants.filter((pid) => room.teams.get(pid) === 'blue')
+      if (!red.length || !blue.length) return TW.toast('빨강팀과 파랑팀에 한 명 이상 필요해요')
+      const teamMaxTries = { red: Math.max(TW.MAX_TRIES, red.length), blue: Math.max(TW.MAX_TRIES, blue.length) }
+      const payload = {
+        round: room.round, roundsTotal: 1, kind: 'team', size,
+        answer: H.encode(H.decompose(answer)), word: answer, setter: null, participants,
+        teams: teamsObject(), teamTurns: { red: red[0], blue: blue[0] }, teamMaxTries,
+        waitSeconds: 30, ts: Date.now(),
+      }
+      Net.send('start', payload); beginRound(payload, false); return
+    }
     const maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, participants.length) : TW.MAX_TRIES
     const payload = {
       round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size,
@@ -308,13 +360,24 @@
     room.waitSeconds = [0, 30, 60, 90].includes(Number(payload.waitSeconds)) ? Number(payload.waitSeconds) : room.waitSeconds
     room.setterPid = payload.setter ? String(payload.setter) : null
     room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
+    if (room.kind === 'team') {
+      room.teams = new Map(Object.entries(payload.teams || {}).filter(([pid, team]) => room.activePids.has(pid) && (team === 'red' || team === 'blue')))
+      room.teamTurns = { red: String(payload.teamTurns?.red || ''), blue: String(payload.teamTurns?.blue || '') }
+      room.teamMaxTries = {
+        red: Math.max(TW.MAX_TRIES, Number(payload.teamMaxTries?.red) || Array.from(room.teams.values()).filter((team) => team === 'red').length),
+        blue: Math.max(TW.MAX_TRIES, Number(payload.teamMaxTries?.blue) || Array.from(room.teams.values()).filter((team) => team === 'blue').length),
+      }
+      room.teamBoards = { red: [], blue: [] }; room.teamStatus = { red: 'playing', blue: 'playing' }; room.teamFinishMs = { red: null, blue: null }
+      room.teamFinals = { red: null, blue: null }; room.teamDeadline = null; room.teamResult = null; room.teamPending = false
+    }
     room.turnPid = room.kind === 'coop' ? String(payload.turnPid || room.participants[0] || '') : null
-    room.maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, Number(payload.maxTries) || room.participants.length) : TW.MAX_TRIES
+    const myTeam = room.teams.get(room.me.pid)
+    room.maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, Number(payload.maxTries) || room.participants.length) : room.kind === 'team' ? room.teamMaxTries[myTeam] || TW.MAX_TRIES : TW.MAX_TRIES
     room.startedAt = Date.now(); room.over = false; room.final = false; room.results = new Map(); room.scoreResults = []
     room.waitEndsAt = null; room.coopPending = false; room.finalChance = null
     room.readyPids = new Set(); room.readyVoters = new Set(); room.resultSheet = 'scoreboard'; clearTimeout(waitTimer); clearTimeout(finalTimer)
     for (const p of room.peers.values()) {
-      p.rows = []; p.status = room.activePids.has(p.pid) ? 'playing' : p.pid === room.setterPid ? 'setter' : 'spectator'; p.tries = null; p.ms = null
+      p.rows = []; p.guesses = []; p.status = room.activePids.has(p.pid) ? 'playing' : p.pid === room.setterPid ? 'setter' : 'spectator'; p.tries = null; p.ms = null
     }
     const isSetter = room.me.pid === room.setterPid; const isActive = room.activePids.has(room.me.pid)
     room.me.role = isSetter ? 'setter' : spectator || !isActive ? 'spectator' : 'player'
@@ -333,8 +396,11 @@
       const sec = Math.floor((Date.now() - room.startedAt) / 1000)
       const round = room.kind === 'relay' ? `${room.round}/${room.roundsTotal}R · ` : ''
       const left = room.waitEndsAt ? Math.max(0, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : null
-      const finalLeft = room.finalChance?.active ? Math.max(0, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)) : null
-      $('#gameSub').textContent = finalLeft !== null ? `마지막 기회 · ${finalLeft}초` : left === null
+      const ownTeam = room.kind === 'team' ? room.teams.get(room.me.pid) : null
+      const finalState = ownTeam ? room.teamFinals[ownTeam] : room.finalChance
+      const finalLeft = finalState?.active ? Math.max(0, Math.ceil((finalState.endsAt - Date.now()) / 1000)) : null
+      const teamLeft = room.teamDeadline ? Math.max(0, Math.ceil((room.teamDeadline.endsAt - Date.now()) / 1000)) : null
+      $('#gameSub').textContent = finalLeft !== null ? `마지막 기회 · ${finalLeft}초` : teamLeft !== null ? `상대 팀 마감까지 ${teamLeft}초` : left === null
         ? `${round}${room.size}칸 · ${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
         : `${round}마감까지 ${left}초`
       const countdown = $('#finalCountdown')
@@ -348,6 +414,14 @@
     let text = ''
     if (room.over) text = `정답: ${room.answer}`
     else if (room.finalChance?.active) text = '마지막 기회! 모두 동시에 한 번씩 도전하세요'
+    else if (room.kind === 'team' && room.teamPending) text = '팀 제출을 확인하는 중…'
+    else if (room.kind === 'team') {
+      const team = room.teams.get(room.me.pid)
+      const other = team === 'red' ? 'blue' : 'red'
+      if (!team) text = '팀전을 관전하고 있어요'
+      else if (room.teamStatus[team] !== 'playing') text = `${TEAM_NAMES[team]} 완료 · ${TEAM_NAMES[other]} 상황을 보고 있어요`
+      else text = room.teamTurns[team] === room.me.pid ? `${TEAM_NAMES[team]} · 내 차례예요` : `${TEAM_NAMES[team]} · ${playerName(room.teamTurns[team])}님 차례`
+    }
     else if (room.kind === 'coop' && room.coopPending) text = '제출을 확인하는 중…'
     else if (room.kind === 'coop') text = room.turnPid === room.me.pid ? '내 차례예요' : `지금은 ${playerName(room.turnPid)}님 차례`
     else if (room.me.role === 'finished') text = room.waitEndsAt ? '완료! 남은 참가자를 응원해 주세요' : '완료! 다른 참가자의 보드를 보고 있어요'
@@ -355,20 +429,32 @@
     else if (room.me.role === 'spectator') text = '이번 라운드는 관전 중이에요'
     banner.textContent = text; banner.hidden = !text
   }
-  function canPlay() { return Boolean(room && room.me.role === 'player' && !room.over && !room.finalChance?.active && (room.kind !== 'coop' || room.turnPid === room.me.pid && !room.coopPending)) }
+  function canPlay() {
+    if (!room || room.me.role !== 'player' || room.over || room.finalChance?.active) return false
+    if (room.kind === 'coop') return room.turnPid === room.me.pid && !room.coopPending
+    if (room.kind === 'team') {
+      const team = room.teams.get(room.me.pid)
+      return Boolean(team && room.teamStatus[team] === 'playing' && !room.teamFinals[team]?.active && room.teamTurns[team] === room.me.pid && !room.teamPending)
+    }
+    return true
+  }
   function blockedInput() {
     if (!room || Date.now() - lastBlocked < 1200) return
     lastBlocked = Date.now()
-    TW.toast(room.me.role !== 'player' ? '이번 라운드는 관전 중이에요' : room.coopPending ? '제출을 확인하는 중이에요' : `${playerName(room.turnPid)}님 차례예요`)
+    const team = room.kind === 'team' ? room.teams.get(room.me.pid) : null
+    TW.toast(room.me.role !== 'player' ? '이번 라운드는 관전 중이에요' : room.coopPending || room.teamPending ? '제출을 확인하는 중이에요' : `${playerName(team ? room.teamTurns[team] : room.turnPid)}님 차례예요`)
   }
   function renderQuickChat() {
     const bar = $('#quickChat')
     if (!bar || !room?.startedAt || room.over) { if (bar) bar.hidden = true; return }
-    const eligible = ['finished', 'setter', 'spectator'].includes(room.me.role)
-    if (!eligible) { bar.hidden = true; return }
-    const force = room.host && room.kind !== 'coop' ? '<button class="btn accent" data-act="room-force">지금 결과 보기</button>' : ''
-    bar.innerHTML = QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('') + force
+    const force = room.host && !['coop', 'team'].includes(room.kind) ? '<button class="btn accent" data-act="room-force">지금 결과 보기</button>' : ''
+    const scopes = room.kind === 'team' && room.teams.has(room.me.pid)
+      ? `<div class="chat-tabs"><button data-chat-scope="all" aria-pressed="${room.chatScope === 'all'}">전체</button><button data-chat-scope="team" aria-pressed="${room.chatScope === 'team'}">우리 팀</button></div>` : ''
+    const messages = room.messages.filter((message) => message.scope === 'all' || message.team === room.teams.get(room.me.pid)).slice(-30)
+    const panel = room.chatOpen ? `<div class="chat-panel">${scopes}<div class="chat-messages">${messages.length ? messages.map((message) => `<p class="${message.pid === room.me.pid ? 'mine' : ''}"><b>${esc(playerName(message.pid))}</b><span>${esc(message.text)}</span></p>`).join('') : '<p class="chat-empty">아직 메시지가 없어요</p>'}</div><div class="chat-form"><input class="field" id="roomChatInput" maxlength="60" placeholder="메시지 입력" autocomplete="off"><button class="btn primary" data-act="room-chat-send">보내기</button></div></div>` : ''
+    bar.innerHTML = `<div class="quick-actions">${QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('')}<button class="chip chat-toggle" data-act="room-chat-toggle" aria-pressed="${room.chatOpen}">채팅${room.messages.length ? ` ${room.messages.length}` : ''}</button>${force}</div>${panel}`
     bar.hidden = false
+    if (room.chatOpen) requestAnimationFrame(() => { const box = bar.querySelector('.chat-messages'); if (box) box.scrollTop = box.scrollHeight })
   }
   function showWaitingView() {
     if (!room || room.kind === 'coop' || room.over) return
@@ -377,16 +463,27 @@
     $('#keyboard').hidden = true; $('.board-wrap').hidden = true; $('#peers').hidden = false
     renderPeers(); renderBanner(); renderQuickChat()
   }
-  function sendChat(text) {
-    if (!room || !QUICK_MESSAGES.includes(text) || !['finished', 'setter', 'spectator'].includes(room.me.role) || room.over) return
-    Net.send('chat', { pid: room.me.pid, text, round: room.round })
-    TW.toast(`나: ${text}`, 1600)
+  function sendChat(value, scope = 'all') {
+    if (!room || room.over) return
+    const text = String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60)
+    if (!text || Date.now() - room.lastChatAt < 700) return
+    const team = room.teams.get(room.me.pid)
+    const safeScope = room.kind === 'team' && team && scope === 'team' ? 'team' : 'all'
+    const payload = { id: `${room.me.pid}:${Date.now()}`, pid: room.me.pid, text, scope: safeScope, team: safeScope === 'team' ? team : null, round: room.round }
+    room.lastChatAt = Date.now(); onChat(payload); Net.send('chat', payload)
+    const input = $('#roomChatInput'); if (input) input.value = ''
   }
   function onChat(payload) {
-    if (!room || room.over || Number(payload.round) !== room.round || !QUICK_MESSAGES.includes(payload.text)) return
-    const sender = room.peers.get(String(payload.pid))
-    if (!sender) return
-    TW.toast(`${playerName(sender.pid)}: ${payload.text}`, 2200)
+    if (!room || room.over || Number(payload.round) !== room.round) return
+    const pid = String(payload.pid || ''); const sender = room.peers.get(pid)
+    const text = String(payload.text || '').trim().replace(/\s+/g, ' ').slice(0, 60)
+    const scope = payload.scope === 'team' ? 'team' : 'all'; const team = payload.team === 'red' || payload.team === 'blue' ? payload.team : null
+    if (!sender || !text || scope === 'team' && (!team || room.teams.get(pid) !== team || room.teams.get(room.me.pid) !== team)) return
+    const id = String(payload.id || `${pid}:${payload.round}:${text}`)
+    if (room.messages.some((message) => message.id === id)) return
+    room.messages.push({ id, pid, text, scope, team }); room.messages = room.messages.slice(-30)
+    const wasOpen = room.chatOpen; renderQuickChat()
+    if (!wasOpen || QUICK_MESSAGES.includes(text)) TW.toast(`${playerName(pid)}: ${text}`, 2200)
   }
   function beginWait(payload) {
     if (!room || room.over || room.kind === 'coop' || Number(payload.round) !== room.round) return
@@ -417,10 +514,11 @@
   }
   function localMark(row, marks) {
     if (!room) return
-    if (room.kind === 'coop') return
+    if (['coop', 'team'].includes(room.kind)) return
     const p = room.peers.get(room.me.pid)
-    if (p) { if (!p.rows) p.rows = []; p.rows[row] = marks.slice() }
-    Net.send('mark', { pid: room.me.pid, row, marks: encodeMarks(marks) }); renderPeers(); persistRoom()
+    const guess = TW.state?.guesses?.[row]
+    if (p) { if (!p.rows) p.rows = []; if (!p.guesses) p.guesses = []; p.rows[row] = marks.slice(); if (guess) p.guesses[row] = guess.slice() }
+    Net.send('mark', { pid: room.me.pid, row, marks: encodeMarks(marks), guess: guess ? H.encode(guess) : '' }); renderPeers(); persistRoom()
   }
   function localDone(status, tries) {
     if (!room || room.me.role !== 'player') return
@@ -430,10 +528,13 @@
     Net.send('done', result); renderPeers(); persistRoom(); showWaitingView(); maybeStartWait(); maybeFinish()
   }
   function onMark(payload) {
-    if (!room || room.kind === 'coop' || !room.startedAt || payload.pid === room.me.pid) return
+    if (!room || ['coop', 'team'].includes(room.kind) || !room.startedAt || payload.pid === room.me.pid) return
     const p = room.peers.get(String(payload.pid)); const marks = decodeMarks(payload.marks); const row = Number(payload.row)
     if (!p || !marks || !(row >= 0 && row < TW.MAX_TRIES)) return
-    if (!p.rows) p.rows = []; p.rows[row] = marks; renderPeers()
+    let guess = null
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { /* 예전 클라이언트는 추측을 보내지 않는다 */ }
+    if (guess?.length !== room.size) guess = null
+    if (!p.rows) p.rows = []; if (!p.guesses) p.guesses = []; p.rows[row] = marks; if (guess) p.guesses[row] = guess; renderPeers()
   }
   function onDone(payload) {
     if (!room || room.kind === 'coop' || !room.startedAt || payload.pid === room.me.pid) return
@@ -443,7 +544,8 @@
     room.results.set(result.pid, result); Object.assign(p, result); renderPeers(); maybeStartWait(); maybeFinish()
   }
   function submitCoop(guess) {
-    if (!room || room.kind !== 'coop') return false
+    if (!room || !['coop', 'team'].includes(room.kind)) return false
+    if (room.kind === 'team') return submitTeam(guess)
     if (!canPlay()) { blockedInput(); return true }
     room.coopPending = true; renderBanner()
     const row = TW.state.guesses.length
@@ -496,6 +598,189 @@
       else scheduleTurnSkip()
     }))
   }
+  function teamMembers(team, onlineOnly = false) {
+    return room.participants.filter((pid) => room.teams.get(pid) === team && (!onlineOnly || room.peers.get(pid)?.online))
+  }
+  function nextTeamParticipant(team, pid, onlineOnly = false) {
+    const list = teamMembers(team, onlineOnly)
+    if (!list.length) return null
+    const index = list.indexOf(pid)
+    return list[(index + 1 + list.length) % list.length]
+  }
+  function submitTeam(guess) {
+    if (!canPlay()) { blockedInput(); return true }
+    const team = room.teams.get(room.me.pid)
+    room.teamPending = true; renderBanner()
+    const payload = { phase: 'team-submit', round: room.round, team, pid: room.me.pid, row: room.teamBoards[team].length, guess: H.encode(guess) }
+    if (room.host) processTeamSubmit(payload)
+    else Net.send('turn', payload)
+    setTimeout(() => {
+      if (!room?.teamPending || room.kind !== 'team' || Number(payload.round) !== room.round) return
+      room.teamPending = false; renderBanner(); TW.toast('팀 제출이 전달되지 않았어요. 다시 눌러 주세요'); Net.send('sync?', { pid: room.me.pid })
+    }, 6000)
+    return true
+  }
+  function processTeamSubmit(payload) {
+    if (!room?.host || room.kind !== 'team' || room.over || payload.phase !== 'team-submit') return
+    const team = payload.team === 'red' || payload.team === 'blue' ? payload.team : null
+    const pid = String(payload.pid || ''); const row = Number(payload.row)
+    if (!team || Number(payload.round) !== room.round || room.teams.get(pid) !== team || room.teamTurns[team] !== pid || room.teamStatus[team] !== 'playing' || room.teamFinals[team]?.active || row !== room.teamBoards[team].length) return
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
+    if (guess.length !== room.size) return
+    const marks = H.score(guess, TW.state.answerJamo)
+    const won = marks.every((mark) => mark === 'correct')
+    const needsFinalChance = !won && row + 1 >= room.teamMaxTries[team]
+    const commit = {
+      phase: 'team-commit', round: room.round, team, pid, row, guess: H.encode(guess), marks: encodeMarks(marks),
+      status: won ? 'won' : 'playing', finishMs: won ? Date.now() - room.startedAt : null,
+      nextPid: !won && !needsFinalChance ? nextTeamParticipant(team, pid) : null, finalChance: needsFinalChance,
+    }
+    Net.send('turn', commit); applyTeamCommit(commit)
+  }
+  function applyTeamCommit(payload) {
+    if (!room || room.kind !== 'team' || room.over || payload.phase !== 'team-commit') return
+    const team = payload.team === 'red' || payload.team === 'blue' ? payload.team : null
+    const pid = String(payload.pid || ''); const row = Number(payload.row)
+    if (!team || Number(payload.round) !== room.round || room.teams.get(pid) !== team || room.teamTurns[team] !== pid || row !== room.teamBoards[team].length) return
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
+    const marks = decodeMarks(payload.marks)
+    if (guess.length !== room.size || !marks) return
+    const expected = H.score(guess, TW.state.answerJamo)
+    if (expected.some((mark, i) => mark !== marks[i])) return
+    const status = payload.status === 'won' ? 'won' : 'playing'
+    room.teamBoards[team].push({ pid, guess, marks }); room.teamTurns[team] = status === 'playing' ? String(payload.nextPid || '') : null
+    if (status === 'won') { room.teamStatus[team] = 'won'; room.teamFinishMs[team] = Math.max(0, Number(payload.finishMs) || 0) }
+    if (pid === room.me.pid) room.teamPending = false
+    const mine = room.teams.get(room.me.pid) === team
+    const after = () => {
+      renderPeers(); renderBanner(); persistRoom()
+      if (payload.finalChance && room.host) startTeamFinal(team)
+      else if (status === 'won' && room.host) afterTeamTerminal(team)
+      else scheduleTeamSkips()
+      if (mine && status === 'won') showTeamWaiting()
+    }
+    if (mine) TW.applyRemote(() => TW.applyRoomTurn(guess, marks, status, after))
+    else after()
+  }
+  function startTeamFinal(team) {
+    if (!room?.host || room.over || room.teamFinals[team]?.active) return
+    const payload = { phase: 'team-final-start', round: room.round, team, seconds: 30, elapsedMs: 0, results: [] }
+    Net.send('turn', payload); beginTeamFinal(payload)
+  }
+  function beginTeamFinal(payload) {
+    if (!room || room.kind !== 'team' || room.over || Number(payload.round) !== room.round || !['red', 'blue'].includes(payload.team)) return
+    const team = payload.team; const seconds = Math.max(1, Math.min(60, Number(payload.seconds) || 30)); const elapsedMs = Math.max(0, Number(payload.elapsedMs) || 0)
+    const results = new Map()
+    for (const item of Array.isArray(payload.results) ? payload.results : []) {
+      const pid = String(item?.pid || '')
+      if (room.teams.get(pid) !== team || results.has(pid)) continue
+      results.set(pid, { pid, status: item.status === 'won' ? 'won' : 'lost', ms: Math.max(0, Number(item.ms) || 0) })
+    }
+    room.teamTurns[team] = null
+    room.teamFinals[team] = { active: true, startedAt: Date.now() - elapsedMs, endsAt: Date.now() + seconds * 1000, submitted: new Set(results.keys()), results, localPending: false }
+    clearTimeout(teamFinalTimers[team])
+    if (room.host) teamFinalTimers[team] = setTimeout(() => finishTeamFinal(team), seconds * 1000)
+    if (room.teams.get(room.me.pid) === team) { $('#keyboard').hidden = true; renderFinalChance() }
+    renderBanner(); persistRoom()
+  }
+  function renderTeamFinalChance() {
+    const panel = $('#finalChance'); const team = room?.teams.get(room.me.pid); const state = team ? room.teamFinals[team] : null
+    if (!panel || !state?.active || room.me.role !== 'player') { if (panel) panel.hidden = true; return }
+    const submitted = state.submitted.has(room.me.pid); const pending = state.localPending
+    panel.hidden = false
+    panel.innerHTML = `<strong>${TEAM_NAMES[team]} 마지막 기회 · <span id="finalCountdown">${Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000))}초</span></strong>
+      <p>팀원 모두 한 번씩 비공개로 제출할 수 있어요.</p>
+      ${submitted || pending ? `<div class="hint ok">${submitted ? '제출 완료! 팀원의 결과를 기다리는 중…' : '정답을 확인하는 중…'}</div>` : `<div class="final-form"><input class="field" id="finalWord" autofocus placeholder="마지막 추측" maxlength="8" autocomplete="off" spellcheck="false"><button class="btn accent" id="finalSubmit" data-act="room-final-submit" disabled>제출</button></div><div class="hint" id="finalHint">한 번만 제출할 수 있어요</div>`}`
+  }
+  function submitTeamFinal() {
+    const team = room?.teams.get(room.me.pid); const state = team ? room.teamFinals[team] : null
+    if (!state?.active || state.submitted.has(room.me.pid) || state.localPending) return
+    const value = finalWordValue(); const exact = value.jamo.join('') === TW.state?.answerJamo?.join('')
+    if (!value.validLength || !TW.isValid(value.jamo) && !exact) return paintFinalWord()
+    state.localPending = true; renderFinalChance()
+    const payload = { phase: 'team-final-submit', round: room.round, team, pid: room.me.pid, guess: H.encode(value.jamo) }
+    if (room.host) processTeamFinalSubmit(payload)
+    else Net.send('turn', payload)
+  }
+  function processTeamFinalSubmit(payload) {
+    if (!room?.host || room.kind !== 'team' || room.over || payload.phase !== 'team-final-submit' || Number(payload.round) !== room.round || !['red', 'blue'].includes(payload.team)) return
+    const team = payload.team; const state = room.teamFinals[team]; const pid = String(payload.pid || '')
+    if (!state?.active || room.teams.get(pid) !== team || state.submitted.has(pid)) return
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
+    if (guess.length !== room.size) return
+    const ack = { phase: 'team-final-ack', round: room.round, team, pid, status: guess.join('') === TW.state.answerJamo.join('') ? 'won' : 'lost', ms: Math.max(0, Date.now() - state.startedAt) }
+    Net.send('turn', ack); onTeamFinalAck(ack)
+    if (teamMembers(team).every((id) => state.submitted.has(id))) finishTeamFinal(team)
+  }
+  function onTeamFinalAck(payload) {
+    const team = payload.team; const state = room?.teamFinals?.[team]; const pid = String(payload.pid || '')
+    if (!state?.active || Number(payload.round) !== room.round || room.teams.get(pid) !== team || state.submitted.has(pid)) return
+    state.results.set(pid, { pid, status: payload.status === 'won' ? 'won' : 'lost', ms: Math.max(0, Number(payload.ms) || 0) }); state.submitted.add(pid)
+    if (pid === room.me.pid) state.localPending = false
+    renderFinalChance(); persistRoom()
+  }
+  function finishTeamFinal(team) {
+    if (!room?.host || room.over || !room.teamFinals[team]?.active) return
+    const state = room.teamFinals[team]
+    const results = teamMembers(team).map((pid) => state.results.get(pid) || { pid, status: 'timeout', ms: null })
+    const winners = results.filter((result) => result.status === 'won').sort((a, b) => a.ms - b.ms || teamMembers(team).indexOf(a.pid) - teamMembers(team).indexOf(b.pid))
+    const payload = { phase: 'team-final-result', round: room.round, team, status: winners.length ? 'won' : 'lost', finishMs: winners.length ? Math.max(0, state.startedAt - room.startedAt + winners[0].ms) : null, results }
+    Net.send('turn', payload); applyTeamFinalResult(payload)
+  }
+  function applyTeamFinalResult(payload) {
+    if (!room || room.kind !== 'team' || room.over || payload.phase !== 'team-final-result' || Number(payload.round) !== room.round || !['red', 'blue'].includes(payload.team)) return
+    const team = payload.team; clearTimeout(teamFinalTimers[team])
+    if (room.teamFinals[team]) room.teamFinals[team].active = false
+    room.teamStatus[team] = payload.status === 'won' ? 'won' : 'lost'; room.teamFinishMs[team] = payload.status === 'won' ? Math.max(0, Number(payload.finishMs) || 0) : null
+    room.teamFinals[team] = { ...(room.teamFinals[team] || {}), active: false, finalResults: Array.isArray(payload.results) ? payload.results : [] }
+    if (room.teams.get(room.me.pid) === team) { $('#finalChance').hidden = true; showTeamWaiting() }
+    renderPeers(); renderBanner(); persistRoom(); if (room.host) afterTeamTerminal(team)
+  }
+  function showTeamWaiting() {
+    if (!room || room.kind !== 'team') return
+    room.me.role = 'finished'; document.body.classList.add('watching'); $('#keyboard').hidden = true; $('.board-wrap').hidden = true; $('#peers').hidden = false
+    renderPeers(); renderBanner(); renderQuickChat()
+  }
+  function afterTeamTerminal(team) {
+    if (!room?.host || room.over) return
+    const other = team === 'red' ? 'blue' : 'red'
+    if (room.teamStatus[other] !== 'playing') return finishTeamMatch()
+    if (room.teamStatus[team] === 'won' && !room.teamDeadline) {
+      const payload = { phase: 'team-deadline', round: room.round, team: other, seconds: 30 }
+      Net.send('turn', payload); beginTeamDeadline(payload)
+    }
+  }
+  function beginTeamDeadline(payload) {
+    if (!room || room.kind !== 'team' || room.over || payload.phase !== 'team-deadline' || Number(payload.round) !== room.round) return
+    room.teamDeadline = { team: payload.team, endsAt: Date.now() + Math.max(1, Number(payload.seconds) || 30) * 1000 }
+    clearTimeout(teamEndTimer)
+    if (room.host) teamEndTimer = setTimeout(forceTeamDeadline, Math.max(0, room.teamDeadline.endsAt - Date.now()))
+    renderBanner()
+  }
+  function forceTeamDeadline() {
+    if (!room?.host || room.over || !room.teamDeadline) return
+    const team = room.teamDeadline.team
+    if (room.teamStatus[team] === 'playing') {
+      const payload = { phase: 'team-force', round: room.round, team }
+      Net.send('turn', payload); applyTeamForce(payload)
+    } else finishTeamMatch()
+  }
+  function applyTeamForce(payload) {
+    if (!room || room.kind !== 'team' || room.over || payload.phase !== 'team-force' || Number(payload.round) !== room.round || !['red', 'blue'].includes(payload.team)) return
+    room.teamStatus[payload.team] = 'lost'; room.teamTurns[payload.team] = null
+    if (room.teamFinals[payload.team]) room.teamFinals[payload.team].active = false
+    if (room.teams.get(room.me.pid) === payload.team) showTeamWaiting()
+    if (room.host) finishTeamMatch()
+  }
+  function finishTeamMatch() {
+    if (!room?.host || room.over) return
+    const results = ['red', 'blue'].map((team) => ({ team, status: room.teamStatus[team] === 'won' ? 'won' : 'lost', ms: room.teamFinishMs[team], tries: room.teamBoards[team].length, finalResults: room.teamFinals[team]?.finalResults || [] }))
+    const payload = { round: room.round, team: true, answer: H.encode(H.decompose(room.answer)), word: room.answer, results }
+    Net.send('over', payload); TW.applyRemote(() => showTeamResult(payload))
+  }
   function startFinalChance() {
     if (!room?.host || room.over || room.finalChance?.active) return
     const payload = { phase: 'final-start', round: room.round, seconds: 30, elapsedMs: 0, results: [] }
@@ -526,6 +811,7 @@
     renderFinalChance(); renderBanner(); persistRoom()
   }
   function renderFinalChance() {
+    if (room?.kind === 'team') return renderTeamFinalChance()
     const panel = $('#finalChance')
     if (!panel || !room?.finalChance?.active || room.me.role !== 'player') { if (panel) panel.hidden = true; return }
     const submitted = room.finalChance.submitted.has(room.me.pid)
@@ -551,6 +837,7 @@
     hint.textContent = '제출할 수 있어요'; hint.className = 'hint ok'
   }
   function submitFinalWord() {
+    if (room?.kind === 'team') return submitTeamFinal()
     if (!room?.finalChance?.active || room.finalChance.submitted.has(room.me.pid) || room.finalChance.localPending) return
     const value = finalWordValue(); const exact = value.jamo.join('') === TW.state?.answerJamo?.join('')
     if (!value.validLength || !TW.isValid(value.jamo) && !exact) return paintFinalWord()
@@ -584,7 +871,24 @@
     renderFinalChance(); persistRoom()
   }
   function onTurn(payload) {
-    if (!room || room.kind !== 'coop' || !room.startedAt || room.over) return
+    if (!room || !room.startedAt || room.over) return
+    if (room.kind === 'team') {
+      if (payload.phase === 'team-submit') return TW.applyRemote(() => processTeamSubmit(payload))
+      if (payload.phase === 'team-commit') return applyTeamCommit(payload)
+      if (payload.phase === 'team-final-start') return TW.applyRemote(() => beginTeamFinal(payload))
+      if (payload.phase === 'team-final-submit') return TW.applyRemote(() => processTeamFinalSubmit(payload))
+      if (payload.phase === 'team-final-ack') return onTeamFinalAck(payload)
+      if (payload.phase === 'team-final-result') return applyTeamFinalResult(payload)
+      if (payload.phase === 'team-deadline') return beginTeamDeadline(payload)
+      if (payload.phase === 'team-force') return applyTeamForce(payload)
+      if (payload.phase === 'team-skip') {
+        const team = payload.team
+        if (!['red', 'blue'].includes(team) || String(payload.pid) !== room.teamTurns[team]) return
+        room.teamTurns[team] = String(payload.nextPid || ''); room.teamPending = false; renderBanner(); scheduleTeamSkips(); return
+      }
+      return
+    }
+    if (room.kind !== 'coop') return
     if (payload.phase === 'final-start') return TW.applyRemote(() => beginFinalChance(payload))
     if (payload.phase === 'final-submit') return TW.applyRemote(() => processFinalSubmit(payload))
     if (payload.phase === 'final-ack') return onFinalAck(payload)
@@ -606,6 +910,21 @@
       Net.send('turn', { phase: 'skip', pid: skipped, nextPid, round: room.round }); room.turnPid = nextPid; room.coopPending = false; renderBanner(); persistRoom()
     }, 15000)
   }
+  function scheduleTeamSkips() {
+    if (!room?.host || room.kind !== 'team' || room.over) return
+    for (const team of ['red', 'blue']) {
+      clearTimeout(teamSkipTimers[team]); teamSkipTimers[team] = null
+      const turnPid = room.teamTurns[team]
+      if (room.teamStatus[team] !== 'playing' || !turnPid || room.teamFinals[team]?.active || room.peers.get(turnPid)?.online) continue
+      teamSkipTimers[team] = setTimeout(() => {
+        if (!room?.host || room.over || room.teamTurns[team] !== turnPid || room.peers.get(turnPid)?.online) return
+        const nextPid = nextTeamParticipant(team, turnPid, true)
+        if (!nextPid) return
+        const payload = { phase: 'team-skip', round: room.round, team, pid: turnPid, nextPid }
+        Net.send('turn', payload); room.teamTurns[team] = nextPid; renderBanner(); persistRoom()
+      }, 15000)
+    }
+  }
   function maybeFinish() {
     if (!room?.host || room.over || !room.activePids.size) return
     if (Array.from(room.activePids).every((pid) => room.results.has(pid))) finishRound()
@@ -613,6 +932,10 @@
   function forceRound() {
     if (!room?.host || room.over) return
     if (room.kind === 'coop') return room.finalChance?.active ? finishFinalChance() : finishCoop('lost', TW.state?.guesses.length || 0)
+    if (room.kind === 'team') {
+      for (const team of ['red', 'blue']) if (room.teamStatus[team] === 'playing') { room.teamStatus[team] = 'lost'; room.teamTurns[team] = null }
+      return finishTeamMatch()
+    }
     const ms = Date.now() - room.startedAt
     for (const pid of room.activePids) if (!room.results.has(pid)) room.results.set(pid, { pid, status: 'lost', tries: TW.MAX_TRIES, ms })
     finishRound()
@@ -648,6 +971,7 @@
   }
   function onOver(payload) {
     if (!room || Number(payload.round) !== room.round) return
+    if (room.kind === 'team' || payload.team) return TW.applyRemote(() => showTeamResult(payload))
     if (room.kind === 'coop' || payload.coop) return TW.applyRemote(() => showCoopResult(payload))
     if (!Array.isArray(payload.scores)) return
     room.totals = new Map(Object.entries(payload.totals || {}))
@@ -679,9 +1003,36 @@
     room.turnPid = null; room.coopPending = false; $('#quickChat').hidden = true; $('#finalChance').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
   }
+  function showTeamResult(payload) {
+    if (!room || !Array.isArray(payload.results)) return
+    clearInterval(timer); clearTimeout(teamEndTimer)
+    for (const team of ['red', 'blue']) { clearTimeout(teamFinalTimers[team]); clearTimeout(teamSkipTimers[team]) }
+    const seen = new Set()
+    const results = payload.results.flatMap((result) => {
+      const team = result?.team
+      if (!['red', 'blue'].includes(team) || seen.has(team)) return []
+      seen.add(team)
+      return [{ team, status: result.status === 'won' ? 'won' : 'lost', ms: result.ms === null ? null : Math.max(0, Number(result.ms) || 0), tries: Math.max(0, Number(result.tries) || 0), finalResults: Array.isArray(result.finalResults) ? result.finalResults : [] }]
+    }).sort((a, b) => a.status === 'won' && b.status !== 'won' ? -1 : a.status !== 'won' && b.status === 'won' ? 1 : (a.ms ?? Infinity) - (b.ms ?? Infinity))
+    if (results.length !== 2) return
+    room.answer = decodeWireWord(payload) || room.answer; room.over = true; room.resultSheet = 'scoreboard'; room.teamResult = results
+    room.teamDeadline = null; room.teamPending = false; $('#quickChat').hidden = true; $('#finalChance').hidden = true
+    TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
+  }
 
   TW.SHEETS.scoreboard = () => {
     if (!room) return '<h2>결과를 찾지 못했어요</h2>'
+    if (room.kind === 'team') {
+      const results = room.teamResult || []
+      const winner = results[0]?.status === 'won' ? results[0].team : null
+      return `<h2>${winner ? `${TEAM_NAMES[winner]} 승리!` : '이번에는 정답 팀이 없어요'}</h2>
+        <div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>팀전 · ${room.size}칸</span></div>
+        <ol class="score-list team-score">${results.map((result, index) => {
+          const members = teamMembers(result.team).map((pid) => playerName(pid)).join(', ')
+          const outcome = result.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초 · ${result.tries}/${room.teamMaxTries[result.team]}` : `실패 · ${result.tries}/${room.teamMaxTries[result.team]}`
+          return `<li class="${result.team}"><strong>${result.status === 'won' ? index + 1 : '—'}</strong><b>${TEAM_NAMES[result.team]}<small>${esc(members)}</small></b><span>${outcome}</span></li>`
+        }).join('')}</ol><div class="sheet-actions">${rematchControls()}<button class="btn accent" data-act="room-copy-result">결과 복사하기</button><button class="btn ghost" data-go="leave">나가기</button></div>`
+    }
     if (room.kind === 'coop') {
       const won = room.coopResult?.status === 'won'
       const winner = room.coopResult?.winnerPid ? playerName(room.coopResult.winnerPid) : null
@@ -760,9 +1111,11 @@
   }
   function returnToLobby(payload) {
     if (!room || !room.over || payload.phase !== 'lobby' || Number(payload.round) !== room.round) return
-    clearTimeout(nextTimer); clearTimeout(waitTimer); clearTimeout(finalTimer); clearTimeout(skipTimer)
+    clearTimeout(nextTimer); clearTimeout(waitTimer); clearTimeout(finalTimer); clearTimeout(skipTimer); clearTimeout(teamEndTimer)
+    for (const team of ['red', 'blue']) { clearTimeout(teamFinalTimers[team]); clearTimeout(teamSkipTimers[team]); teamFinalTimers[team] = teamSkipTimers[team] = null }
     room.round = 1; room.totals = new Map(); room.startedAt = null; room.answer = null; room.over = false; room.final = false
     room.results = new Map(); room.scoreResults = []; room.coopResult = null; room.finalChance = null; room.readyPids = new Set(); room.readyVoters = new Set()
+    room.teamBoards = { red: [], blue: [] }; room.teamTurns = { red: null, blue: null }; room.teamStatus = { red: 'waiting', blue: 'waiting' }; room.teamFinishMs = { red: null, blue: null }; room.teamFinals = { red: null, blue: null }; room.teamDeadline = null; room.teamResult = null; room.teamPending = false
     room.participants = []; room.activePids = new Set(); room.turnPid = null; room.pick = null; room.me.role = 'player'
     document.body.classList.remove('watching'); showLobby(); persistRoom(); broadcastLobby()
   }
@@ -774,6 +1127,10 @@
   }
   function copyResult() {
     if (!room) return
+    if (room.kind === 'team') {
+      const rows = (room.teamResult || []).map((result, index) => `${result.status === 'won' ? `${index + 1}.` : '—'} ${TEAM_NAMES[result.team]} · ${result.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초` : '실패'} · ${result.tries}/${room.teamMaxTries[result.team]}`)
+      return TW.copyAndTell([`오늘의 단어 팀전 · ${room.size}칸`, `정답 ${room.answer}`, ...rows, inviteText()].join('\n'), '팀전 결과를 복사했어요')
+    }
     if (room.kind === 'coop') {
       const score = room.coopResult?.status === 'won' ? `${room.coopResult.tries}/${room.maxTries}` : `X/${room.maxTries}`
       const finalRanks = (room.coopResult?.finalResults || []).filter((result) => result.status === 'won').sort((a, b) => a.ms - b.ms).map((result, i) => `${i + 1}. ${playerName(result.pid)} · ${(result.ms / 1000).toFixed(1)}초`)
@@ -782,30 +1139,99 @@
     const rows = room.scoreResults.map((r, i) => `${i + 1}. ${room.peers.get(r.pid)?.nick || '나간 참가자'} · ${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}`)
     TW.copyAndTell([`오늘의 단어 ${MODES[room.kind]} · ${room.size}칸`, `정답 ${room.answer}`, ...rows, inviteText()].join('\n'), '대결 결과를 복사했어요')
   }
-  function renderPeers() {
-    if (!room || !room.startedAt || room.kind === 'coop') return
-    const list = orderedPlayers().filter((p) => (room.activePids.has(p.pid) || p.status === 'playing') && (room.me.role === 'setter' || p.pid !== room.me.pid))
-    const names = displayNames()
-    $('#peers').innerHTML = list.map((p) => {
-      const rows = Array.from({ length: TW.MAX_TRIES }, (_, row) => {
-        const marks = p.rows?.[row] || []
-        return `<div class="mini-row" style="--cols:${room.size}">${Array.from({ length: room.size }, (_, col) => `<i class="mini-tile ${marks[col] || ''}"></i>`).join('')}</div>`
-      }).join('')
-      return `<div class="peer ${p.online ? '' : 'offline'} ${['won', 'lost'].includes(p.status) ? 'done' : ''}" data-pid="${esc(p.pid)}"><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b><div class="mini">${rows}</div></div>`
+  function guessLabel(guess) {
+    if (!Array.isArray(guess) || guess.length !== room?.size) return ''
+    const encoded = H.encode(guess)
+    return W?.answers?.[room.size]?.find((word) => H.encode(H.decompose(word)) === encoded) || H.compose(guess) || guess.join('')
+  }
+  function miniRows(rows, maxTries, revealWords) {
+    return Array.from({ length: maxTries }, (_, row) => {
+      const entry = rows?.[row]
+      const marks = Array.isArray(entry) ? entry : entry?.marks || []
+      const guess = Array.isArray(entry) ? null : entry?.guess
+      const tiles = `<div class="mini-row" style="--cols:${room.size}">${Array.from({ length: room.size }, (_, col) => `<i class="mini-tile ${marks[col] || ''}"></i>`).join('')}</div>`
+      return revealWords && guess ? `<div class="mini-line">${tiles}<span>${esc(guessLabel(guess))}</span></div>` : tiles
     }).join('')
+  }
+  function renderPeers() {
+    const peers = $('#peers')
+    if (!peers || !room || !room.startedAt || room.kind === 'coop') return
+    if (room.kind === 'team') {
+      const mine = room.teams.get(room.me.pid)
+      const teams = mine ? [mine === 'red' ? 'blue' : 'red'] : ['red', 'blue']
+      const revealWords = room.me.role !== 'player'
+      peers.innerHTML = teams.map((team) => {
+        const members = teamMembers(team).map((pid) => playerName(pid)).join(', ')
+        const done = room.teamStatus[team] !== 'playing'
+        return `<div class="peer team-peer ${team} ${done ? 'done' : ''}" data-team-board="${team}"><b>${TEAM_NAMES[team]}${done ? ' · 완료' : ''}</b><small>${esc(members)}</small><div class="mini">${miniRows(room.teamBoards[team], room.teamMaxTries[team], revealWords)}</div></div>`
+      }).join('')
+      peers.hidden = false
+      return
+    }
+    const list = orderedPlayers().filter((p) => (room.activePids.has(p.pid) || p.status === 'playing') && (room.me.role === 'setter' || p.pid !== room.me.pid))
+    const names = displayNames(); const revealWords = ['setter', 'finished', 'spectator'].includes(room.me.role)
+    peers.innerHTML = list.map((p) => {
+      const entries = Array.from({ length: TW.MAX_TRIES }, (_, row) => ({ marks: p.rows?.[row] || [], guess: p.guesses?.[row] || null }))
+      return `<div class="peer ${p.online ? '' : 'offline'} ${['won', 'lost'].includes(p.status) ? 'done' : ''}" data-pid="${esc(p.pid)}"><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b><div class="mini">${miniRows(entries, TW.MAX_TRIES, revealWords)}</div></div>`
+    }).join('')
+  }
+  function wireTeamState() {
+    if (!room || room.kind !== 'team') return null
+    const finals = {}
+    for (const team of ['red', 'blue']) {
+      const state = room.teamFinals[team]
+      finals[team] = state ? {
+        active: Boolean(state.active), seconds: state.active ? Math.max(1, Math.ceil((state.endsAt - Date.now()) / 1000)) : 0,
+        elapsedMs: state.active ? Math.max(0, Date.now() - state.startedAt) : 0,
+        results: Array.from(state.results?.values?.() || state.finalResults || []), finalResults: state.finalResults || [],
+      } : null
+    }
+    return {
+      teams: teamsObject(), turns: room.teamTurns, status: room.teamStatus, maxTries: room.teamMaxTries, finishMs: room.teamFinishMs,
+      boards: Object.fromEntries(['red', 'blue'].map((team) => [team, room.teamBoards[team].map((entry) => ({ pid: entry.pid, guess: H.encode(entry.guess), marks: encodeMarks(entry.marks) }))])),
+      finals, deadline: room.teamDeadline ? { team: room.teamDeadline.team, seconds: Math.max(1, Math.ceil((room.teamDeadline.endsAt - Date.now()) / 1000)) } : null,
+    }
+  }
+  function applyTeamSync(state) {
+    if (!room || room.kind !== 'team' || !state) return
+    room.teams = new Map(Object.entries(state.teams || {}).filter(([pid, team]) => room.activePids.has(pid) && ['red', 'blue'].includes(team)))
+    room.teamTurns = { red: String(state.turns?.red || ''), blue: String(state.turns?.blue || '') }
+    room.teamStatus = { red: ['playing', 'won', 'lost'].includes(state.status?.red) ? state.status.red : 'playing', blue: ['playing', 'won', 'lost'].includes(state.status?.blue) ? state.status.blue : 'playing' }
+    room.teamMaxTries = { red: Math.max(TW.MAX_TRIES, Number(state.maxTries?.red) || 0), blue: Math.max(TW.MAX_TRIES, Number(state.maxTries?.blue) || 0) }
+    room.teamFinishMs = { red: state.finishMs?.red === null ? null : Math.max(0, Number(state.finishMs?.red) || 0), blue: state.finishMs?.blue === null ? null : Math.max(0, Number(state.finishMs?.blue) || 0) }
+    for (const team of ['red', 'blue']) {
+      room.teamBoards[team] = (Array.isArray(state.boards?.[team]) ? state.boards[team] : []).flatMap((entry) => {
+        let guess
+        try { guess = Array.from(H.decode(String(entry?.guess || ''))) } catch (e) { return [] }
+        const marks = decodeMarks(entry?.marks)
+        return guess.length === room.size && marks ? [{ pid: String(entry.pid || ''), guess, marks }] : []
+      }).slice(0, room.teamMaxTries[team])
+      room.teamFinals[team] = null
+      const final = state.finals?.[team]
+      if (final?.active) beginTeamFinal({ phase: 'team-final-start', round: room.round, team, seconds: final.seconds, elapsedMs: final.elapsedMs, results: final.results })
+      else if (final) room.teamFinals[team] = { active: false, finalResults: Array.isArray(final.finalResults) ? final.finalResults : [] }
+    }
+    const mine = room.teams.get(room.me.pid)
+    if (mine) {
+      room.maxTries = room.teamMaxTries[mine]
+      TW.restoreRoomGame(room.teamBoards[mine].map((entry) => entry.guess), room.teamStatus[mine] === 'playing' ? 'playing' : room.teamStatus[mine])
+      if (room.teamStatus[mine] !== 'playing') showTeamWaiting()
+    }
+    if (state.deadline) beginTeamDeadline({ phase: 'team-deadline', round: room.round, team: state.deadline.team, seconds: state.deadline.seconds })
+    renderPeers(); renderBanner(); renderQuickChat(); scheduleTeamSkips(); persistRoom()
   }
   function onSyncRequest(payload) {
     if (!room?.host || payload.pid === room.me.pid) return
     if (!room.startedAt) { broadcastLobby(); return }
-    const boards = {}
-    for (const p of room.peers.values()) boards[p.pid] = (p.rows || []).map((marks) => encodeMarks(marks || []))
+    const boards = {}; const guessBoards = {}
+    for (const p of room.peers.values()) { boards[p.pid] = (p.rows || []).map((marks) => encodeMarks(marks || [])); guessBoards[p.pid] = (p.guesses || []).map((guess) => guess ? H.encode(guess) : '') }
     Net.send('sync!', {
       pid: payload.pid, round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size: room.size,
       answer: H.encode(H.decompose(room.answer)), word: room.answer, ts: Date.now(), setter: room.setterPid,
-      participants: room.participants, turnPid: room.turnPid, boards, waitSeconds: room.waitSeconds, maxTries: room.maxTries,
+      participants: room.participants, turnPid: room.turnPid, boards, guessBoards, waitSeconds: room.waitSeconds, maxTries: room.maxTries, teamState: wireTeamState(),
       waitRemaining: room.waitEndsAt ? Math.max(1, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : 0,
       guesses: room.kind === 'coop' ? (TW.state?.guesses || []).map((g) => H.encode(g)) : [],
-      scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult,
+      scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult, teamResult: room.teamResult,
       readyState: room.over ? { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters: Array.from(room.readyVoters.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))) } : null,
       finalChanceState: room.finalChance?.active ? { seconds: Math.max(1, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)), elapsedMs: Math.max(0, Date.now() - room.finalChance.startedAt), results: Array.from(room.finalChance.results.values()) } : null,
     })
@@ -814,9 +1240,10 @@
     if (!room || payload.pid !== room.me.pid) return
     if (room.startedAt) {
       if (room.over) { if (payload.readyState) applyReadyState(payload.readyState); return }
-      if (room.kind !== 'coop' || Number(payload.round) !== room.round) return
+      if (Number(payload.round) !== room.round || !['coop', 'team'].includes(room.kind)) return
       TW.applyRemote(() => {
         room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
+        if (room.kind === 'team') return applyTeamSync(payload.teamState)
         room.turnPid = String(payload.turnPid || ''); room.coopPending = false
         TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
         if (payload.finalChanceState) beginFinalChance({ phase: 'final-start', round: room.round, ...payload.finalChanceState })
@@ -828,7 +1255,9 @@
     const isParticipant = Array.isArray(payload.participants) && payload.participants.map(String).includes(room.me.pid)
     const canResume = Boolean(resume?.active && isParticipant && Number(resume.round) === Number(payload.round))
     beginRound(payload, !canResume)
-    if (room.kind === 'coop') {
+    if (room.kind === 'team') {
+      applyTeamSync(payload.teamState)
+    } else if (room.kind === 'coop') {
       TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
     } else if (canResume) {
       TW.restoreRoomGame((resume.guesses || []).map((g) => H.decode(String(g))), resume.status)
@@ -837,19 +1266,25 @@
     room.resume = null
     for (const [pid, rows] of Object.entries(payload.boards || {})) {
       const p = room.peers.get(pid)
-      if (p) p.rows = rows.map((marks) => decodeMarks(marks) || [])
+      if (p) { p.rows = rows.map((marks) => decodeMarks(marks) || []); p.guesses = (payload.guessBoards?.[pid] || []).map((guess) => { try { return Array.from(H.decode(String(guess || ''))) } catch (e) { return null } }) }
     }
     for (const result of payload.scores || []) room.results.set(result.pid, result)
     room.totals = new Map(Object.entries(payload.totals || {})); renderPeers(); renderBanner()
     if (Number(payload.waitRemaining) > 0) beginWait({ round: room.round, seconds: Number(payload.waitRemaining) })
     if (payload.finalChanceState) beginFinalChance({ phase: 'final-start', round: room.round, ...payload.finalChanceState })
-    if (payload.over) room.kind === 'coop' ? showCoopResult(payload.coopResult || payload) : showScoreboard(Array.from(room.results.values()), Boolean(payload.final))
+    if (payload.over) room.kind === 'team' ? showTeamResult({ round: room.round, team: true, word: room.answer, results: payload.teamResult || [] }) : room.kind === 'coop' ? showCoopResult(payload.coopResult || payload) : showScoreboard(Array.from(room.results.values()), Boolean(payload.final))
     if (payload.readyState) applyReadyState(payload.readyState)
   }
 
   document.addEventListener('click', (event) => {
     const chat = event.target.closest('[data-chat]')
-    if (chat) { sendChat(chat.dataset.chat); return }
+    if (chat) { sendChat(chat.dataset.chat, room?.chatScope); return }
+    const scope = event.target.closest('[data-chat-scope]')
+    if (scope && room) { room.chatScope = scope.dataset.chatScope === 'team' ? 'team' : 'all'; renderQuickChat(); return }
+    const teamPick = event.target.closest('[data-team-pid][data-team]')
+    if (teamPick && room?.host && room.kind === 'team' && !room.startedAt && ['red', 'blue'].includes(teamPick.dataset.team)) {
+      room.teams.set(teamPick.dataset.teamPid, teamPick.dataset.team); renderLobby(); broadcastLobby(); return
+    }
     const setter = event.target.closest('[data-setter]')
     if (setter && room?.host && room.kind === 'setter' && !room.startedAt) {
       room.setterPid = setter.dataset.setter; renderLobby(); broadcastLobby(); return
@@ -877,6 +1312,7 @@
     else if (event.target.id === 'roomNick' && $('#roomJoinCode')?.value) TW.ACTIONS['room-join']()
     else if (event.target.id === 'roomWord' && !$('#roomWordButton')?.disabled) submitSetterWord()
     else if (event.target.id === 'finalWord' && !$('#finalSubmit')?.disabled) submitFinalWord()
+    else if (event.target.id === 'roomChatInput') { event.preventDefault(); sendChat(event.target.value, room?.chatScope) }
   })
   Net.on('roster', onRoster); Net.on('status', onStatus); Net.on('lobby', onLobby); Net.on('pick', onPick); Net.on('word', onWord)
   Net.on('start', (payload) => beginRound(payload, false)); Net.on('mark', onMark); Net.on('done', onDone); Net.on('turn', onTurn)

@@ -125,12 +125,10 @@ try {
   players.push(a)
   const rootModes = await a.evaluate(`[...document.querySelectorAll('#homeRootMenu .btn')].filter((button) => !button.hidden).map((button) => button.textContent.trim())`)
   if (rootModes.join(',') !== '싱글 모드,멀티 모드') throw new Error('첫 화면 2단계 메뉴 실패: ' + JSON.stringify(rootModes))
-  await a.evaluate(`(() => {
-    document.querySelector('[data-go=rooms]').click()
-    document.getElementById('roomNick').value = 'A'
-    document.querySelector('[data-room-new=versus]').click()
-    document.querySelector('[data-act=room-create]').click()
-  })()`)
+  await a.evaluate(`(() => { document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = 'A' })()`)
+  const initialModePick = await a.evaluate(`({ selected: document.querySelectorAll('[data-room-pick][aria-pressed="true"]').length, createDisabled: document.querySelector('[data-act=room-open-create]').disabled })`)
+  if (initialModePick.selected !== 0 || !initialModePick.createDisabled) throw new Error('멀티 모드 초기 선택 상태 실패: ' + JSON.stringify(initialModePick))
+  await a.evaluate(`(() => { document.querySelector('[data-room-pick=versus]').click(); document.querySelector('[data-act=room-open-create]').click(); document.querySelector('[data-act=room-create]').click() })()`)
   await waitFor(a, `!document.getElementById('lobby').hidden && document.getElementById('roomCode').textContent.length === 6`)
   const code = await a.evaluate(`document.getElementById('roomCode').textContent`)
 
@@ -187,7 +185,8 @@ try {
     await a.evaluate(`(() => {
       document.querySelector('[data-go=rooms]').click()
       document.getElementById('roomNick').value = 'A'
-      document.querySelector('[data-room-new="${kind}"]').click()
+      document.querySelector('[data-room-pick="${kind}"]').click()
+      document.querySelector('[data-act=room-open-create]').click()
       document.querySelector('[data-rsize="${size}"]').click()
       ${kind === 'relay' ? `document.querySelector('[data-rounds="${rounds}"]').click()` : ''}
       document.querySelector('[data-act=room-create]').click()

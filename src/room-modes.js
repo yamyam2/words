@@ -72,7 +72,8 @@
     return `<h2>같이 하기</h2>
       <p class="muted">친구들과 실시간으로 대결하거나 한 보드를 함께 풀 수 있어요.</p>
       <div style="margin-top:16px"><input class="field" id="roomNick" ${preset ? 'autofocus' : ''} placeholder="닉네임" maxlength="16" value="${esc(player.nick)}" autocomplete="nickname" autocapitalize="off" spellcheck="false"><div class="hint" id="roomHint"></div></div>
-      <p style="margin-top:18px"><b>새 방 모드</b></p><div class="room-mode-grid">${Object.entries(MODES).map(([kind, label]) => `<button class="btn ${kind === 'spy' ? 'accent' : ''}" data-room-new="${kind}">${label}</button>`).join('')}</div>
+      <p style="margin-top:18px"><b>새 방 모드</b></p><div class="room-mode-grid">${Object.entries(MODES).map(([kind, label]) => `<button class="btn" data-room-pick="${kind}" aria-pressed="${draft.kind === kind}">${label}</button>`).join('')}</div>
+      <div class="sheet-actions"><button class="btn primary" data-act="room-open-create" ${Object.hasOwn(MODES, draft.kind) ? '' : 'disabled'}>방 만들기</button></div>
       <div class="hr"></div><p><b>방 코드로 들어가기</b></p>
       <div style="margin-top:10px"><input class="field" id="roomJoinCode" placeholder="6자리 코드" maxlength="80" value="${esc(preset)}" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
       <div class="sheet-actions"><button class="btn" data-act="room-join">들어가기</button></div>`
@@ -104,7 +105,7 @@
     <div style="margin-top:16px"><input class="field" id="roomWord" autofocus placeholder="예: 시민" maxlength="8" autocomplete="off" spellcheck="false"><div class="hint" id="roomWordHint">단어를 입력해 주세요</div></div>
     <div class="sheet-actions"><button class="btn primary" id="roomWordButton" data-act="room-word" disabled>이 단어 내기</button></div>`
 
-  TW.GOES.rooms = () => TW.openSheet('rooms')
+  TW.GOES.rooms = () => { draft.kind = null; TW.openSheet('rooms') }
   TW.GOES.leave = leaveRoom
   TW.ACTIONS['room-open-create'] = () => {
     const nick = readNick()
@@ -1316,14 +1317,14 @@
   }
 
   document.addEventListener('click', (event) => {
-    const roomMode = event.target.closest('[data-room-new]')
-    if (roomMode && Object.hasOwn(MODES, roomMode.dataset.roomNew)) {
-      const nick = readNick()
-      if (!nick) return
-      TW.store.set('tw.player.v1', { ...savedPlayer(), nick }); draft.kind = roomMode.dataset.roomNew
+    const roomMode = event.target.closest('[data-room-pick]')
+    if (roomMode && Object.hasOwn(MODES, roomMode.dataset.roomPick)) {
+      draft.kind = roomMode.dataset.roomPick
       if (draft.kind !== 'relay') draft.roundsTotal = 1
       else if (draft.roundsTotal === 1) draft.roundsTotal = 3
-      TW.openSheet('create'); return
+      for (const button of document.querySelectorAll('[data-room-pick]')) button.setAttribute('aria-pressed', String(button === roomMode))
+      const create = document.querySelector('[data-act=room-open-create]'); if (create) create.disabled = false
+      return
     }
     const chat = event.target.closest('[data-chat]')
     if (chat) { sendChat(chat.dataset.chat, room?.chatScope); return }
@@ -1371,7 +1372,7 @@
   if (Net.available) {
     roomButton.hidden = false
     const resume = TW.store.get('tw.room.v1', null)
-    if (globalThis.TWRoomHash) setTimeout(() => TW.openSheet('rooms'), 0)
+    if (globalThis.TWRoomHash) setTimeout(() => { draft.kind = null; TW.openSheet('rooms') }, 0)
     else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(resume.code, resume.nick, { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1, waitSeconds: [0, 30, 60, 90].includes(Number(resume.waitSeconds)) ? Number(resume.waitSeconds) : 60 }, resume), 0)
   } else { roomButton.remove(); globalThis.TWRoomHash = null }
 

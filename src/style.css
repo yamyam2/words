@@ -259,6 +259,21 @@ body.watching .mini-line > span { font-size: 13px; min-width: 48px; color: var(-
   background: #262628; border-radius: 20px 20px 0 0; padding: 22px 20px calc(26px + env(safe-area-inset-bottom));
   animation: rise .22s ease-out;
 }
+.sheet.invite-entry-sheet {
+  align-items: flex-start;
+  box-sizing: border-box;
+  padding: max(72px, calc(env(safe-area-inset-top) + 24px)) 12px 12px;
+}
+.sheet.invite-entry-sheet .sheet-card {
+  width: min(100%, 420px);
+  max-height: calc(100dvh - max(84px, calc(env(safe-area-inset-top) + 36px)));
+  border-radius: 20px;
+  padding-bottom: 24px;
+}
+@media (max-height: 600px) {
+  .sheet.invite-entry-sheet { padding-top: max(12px, calc(env(safe-area-inset-top) + 8px)); }
+  .sheet.invite-entry-sheet .sheet-card { max-height: calc(100dvh - max(24px, calc(env(safe-area-inset-top) + 16px))); }
+}
 @keyframes rise { from { transform: translateY(18px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .sheet-card h2 { font-size: 19px; font-weight: 800; margin-bottom: 14px; }
 .sheet-close { position: absolute; top: 14px; right: 14px; font-size: 22px; color: var(--ink-dim); padding: 6px; }

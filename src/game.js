@@ -513,6 +513,7 @@
   function openSheet(kind, payload) {
     const html = SHEETS[kind](payload)
     el.sheetCard.innerHTML = `<button class="sheet-close" data-close aria-label="닫기">&times;</button>${html}`
+    el.sheet.classList.toggle('invite-entry-sheet', kind === 'rooms' && Boolean(globalThis.TWRoomHash))
     el.sheet.hidden = false
     el.sheetCard.scrollTop = 0
     const field = el.sheetCard.querySelector('[autofocus]')

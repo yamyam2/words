@@ -83,7 +83,7 @@ async function browserSocket() {
 
 const cdp = connect(await browserSocket())
 await cdp.ready
-async function newPlayer(name, url = PAGE_URL) {
+async function newPlayer(name, url = PAGE_URL, viewport = null) {
   const { browserContextId } = await cdp.send('Target.createBrowserContext')
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', browserContextId })
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
@@ -92,6 +92,7 @@ async function newPlayer(name, url = PAGE_URL) {
   await call('Runtime.enable')
   await call('Network.enable')
   await call('Network.setCacheDisabled', { cacheDisabled: true })
+  if (viewport) await call('Emulation.setDeviceMetricsOverride', viewport)
   await call('Page.addScriptToEvaluateOnNewDocument', { source: `
     globalThis.__sent = [];
     const originalSend = WebSocket.prototype.send;
@@ -134,12 +135,16 @@ try {
   await waitFor(a, `!document.getElementById('lobby').hidden && document.getElementById('roomCode').textContent.length === 6`)
   const code = await a.evaluate(`document.getElementById('roomCode').textContent`)
 
-  const b = await newPlayer('B', `${PAGE_URL}#r=${code}`)
+  const mobileViewport = { width: 393, height: 852, deviceScaleFactor: 3, mobile: true }
+  const b = await newPlayer('B', `${PAGE_URL}#r=${code}`, mobileViewport)
   players.push(b)
   await waitFor(b, `document.getElementById('roomNick') !== null`)
-  const inviteEntry = await b.evaluate(`({ text: document.getElementById('sheetCard').textContent, categories: document.querySelectorAll('[data-room-category]').length, codeInput: !!document.getElementById('roomJoinCode'), join: !!document.querySelector('[data-act=room-join]') })`)
-  if (inviteEntry.text.includes('같이 하기') || inviteEntry.text.includes('친구들과 실시간') || inviteEntry.categories || inviteEntry.codeInput || !inviteEntry.join || !inviteEntry.text.includes('별명을 입력해 주세요')) throw new Error('초대 링크 전용 입장 화면 실패: ' + JSON.stringify(inviteEntry))
-  ok('초대 링크 → 별명과 들어가기만 표시 · 모드/방 코드 입력 숨김')
+  await b.call('Emulation.setDeviceMetricsOverride', { ...mobileViewport, height: 500 })
+  await sleep(150)
+  const inviteEntry = await b.evaluate(`(() => { const card = document.getElementById('sheetCard').getBoundingClientRect(); const title = document.querySelector('#sheetCard h2').getBoundingClientRect(); return { text: document.getElementById('sheetCard').textContent, categories: document.querySelectorAll('[data-room-category]').length, codeInput: !!document.getElementById('roomJoinCode'), join: !!document.querySelector('[data-act=room-join]'), positioned: document.getElementById('sheet').classList.contains('invite-entry-sheet'), cardTop: card.top, titleTop: title.top, titleBottom: title.bottom, viewportHeight: innerHeight } })()`)
+  if (inviteEntry.text.includes('같이 하기') || inviteEntry.text.includes('친구들과 실시간') || inviteEntry.categories || inviteEntry.codeInput || !inviteEntry.join || !inviteEntry.text.includes('별명을 입력해 주세요') || !inviteEntry.positioned || inviteEntry.cardTop < 0 || inviteEntry.titleTop < 0 || inviteEntry.titleBottom > inviteEntry.viewportHeight) throw new Error('초대 링크 전용 입장 화면 실패: ' + JSON.stringify(inviteEntry))
+  ok('초대 링크 → 모바일 키보드 높이에서도 별명 제목·입력 화면 표시')
+  await b.call('Emulation.setDeviceMetricsOverride', mobileViewport)
   await b.evaluate(`(() => {
     document.getElementById('roomNick').value = 'B'
     document.querySelector('[data-act=room-join]').click()

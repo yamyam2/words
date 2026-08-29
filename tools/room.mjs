@@ -126,8 +126,8 @@ try {
   const rootModes = await a.evaluate(`[...document.querySelectorAll('#homeRootMenu .btn')].filter((button) => !button.hidden).map((button) => button.textContent.trim())`)
   if (rootModes.join(',') !== '싱글 모드,멀티 모드') throw new Error('첫 화면 2단계 메뉴 실패: ' + JSON.stringify(rootModes))
   await a.evaluate(`(() => { document.querySelector('[data-go=rooms]').click(); document.getElementById('roomNick').value = 'A' })()`)
-  const initialModePick = await a.evaluate(`({ selected: document.querySelectorAll('[data-room-pick][aria-pressed="true"]').length, categories: [...document.querySelectorAll('[data-room-category]')].map((button) => button.textContent.trim()), modeHidden: document.getElementById('roomModeStep').hidden })`)
-  if (initialModePick.selected !== 0 || initialModePick.categories.join(',') !== '개인전,팀전' || !initialModePick.modeHidden) throw new Error('멀티 모드 초기 선택 상태 실패: ' + JSON.stringify(initialModePick))
+  const initialModePick = await a.evaluate(`({ selected: document.querySelectorAll('[data-room-pick][aria-pressed="true"]').length, categories: [...document.querySelectorAll('[data-room-category]')].map((button) => button.textContent.trim()), modeHidden: document.getElementById('roomModeStep').hidden, codeInput: !!document.getElementById('roomJoinCode') })`)
+  if (initialModePick.selected !== 0 || initialModePick.categories.join(',') !== '개인전,팀전' || !initialModePick.modeHidden || !initialModePick.codeInput) throw new Error('멀티 모드 초기 선택 상태 실패: ' + JSON.stringify(initialModePick))
   const groupedModes = await a.evaluate(`(() => { document.querySelector('[data-room-category=solo]').click(); const solo = [...document.querySelectorAll('[data-room-pick]')].map((button) => button.textContent.trim()); document.querySelector('[data-room-category=team]').click(); const team = [...document.querySelectorAll('[data-room-pick]')].map((button) => button.textContent.trim()); return { solo, team } })()`)
   if (groupedModes.solo.join(',') !== '같은 단어 대결,출제 대결,연판' || groupedModes.team.join(',') !== '협동,팀전,팀 출제 대결,스파이전,대장전') throw new Error('개인전/팀전 모드 분류 실패: ' + JSON.stringify(groupedModes))
   await a.evaluate(`(() => { document.querySelector('[data-room-category=solo]').click(); document.querySelector('[data-room-pick=versus]').click(); document.querySelector('[data-act=room-open-create]').click(); document.querySelector('[data-act=room-create]').click() })()`)
@@ -137,6 +137,9 @@ try {
   const b = await newPlayer('B', `${PAGE_URL}#r=${code}`)
   players.push(b)
   await waitFor(b, `document.getElementById('roomNick') !== null`)
+  const inviteEntry = await b.evaluate(`({ text: document.getElementById('sheetCard').textContent, categories: document.querySelectorAll('[data-room-category]').length, codeInput: !!document.getElementById('roomJoinCode'), join: !!document.querySelector('[data-act=room-join]') })`)
+  if (inviteEntry.text.includes('같이 하기') || inviteEntry.text.includes('친구들과 실시간') || inviteEntry.categories || inviteEntry.codeInput || !inviteEntry.join || !inviteEntry.text.includes('별명을 입력해 주세요')) throw new Error('초대 링크 전용 입장 화면 실패: ' + JSON.stringify(inviteEntry))
+  ok('초대 링크 → 별명과 들어가기만 표시 · 모드/방 코드 입력 숨김')
   await b.evaluate(`(() => {
     document.getElementById('roomNick').value = 'B'
     document.querySelector('[data-act=room-join]').click()

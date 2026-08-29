@@ -72,6 +72,9 @@
   TW.SHEETS.rooms = () => {
     const player = savedPlayer()
     const preset = globalThis.TWRoomHash || ''
+    if (preset) return `<h2>별명을 입력해 주세요</h2>
+      <div style="margin-top:16px"><input class="field" id="roomNick" autofocus placeholder="별명" maxlength="16" value="${esc(player.nick)}" autocomplete="nickname" autocapitalize="off" spellcheck="false"><div class="hint" id="roomHint"></div></div>
+      <div class="sheet-actions"><button class="btn primary" data-act="room-join">들어가기</button></div>`
     return `<h2>같이 하기</h2>
       <p class="muted">친구들과 실시간으로 대결하거나 한 보드를 함께 풀 수 있어요.</p>
       <div style="margin-top:16px"><input class="field" id="roomNick" ${preset ? 'autofocus' : ''} placeholder="닉네임" maxlength="16" value="${esc(player.nick)}" autocomplete="nickname" autocapitalize="off" spellcheck="false"><div class="hint" id="roomHint"></div></div>
@@ -121,7 +124,7 @@
   TW.ACTIONS['room-create'] = () => enterRoom(Net.roomCode(), savedPlayer().nick, draft)
   TW.ACTIONS['room-join'] = () => {
     const nick = readNick()
-    const code = normalizeCode($('#roomJoinCode')?.value)
+    const code = normalizeCode($('#roomJoinCode')?.value || globalThis.TWRoomHash)
     if (!nick) return
     if (!code) return setRoomHint('6자리 방 코드를 확인해 주세요')
     enterRoom(code, nick, { kind: 'versus', size: 5, roundsTotal: 1 })
@@ -1529,7 +1532,7 @@
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
     if (event.target.id === 'roomJoinCode') TW.ACTIONS['room-join']()
-    else if (event.target.id === 'roomNick' && $('#roomJoinCode')?.value) TW.ACTIONS['room-join']()
+    else if (event.target.id === 'roomNick' && ($('#roomJoinCode')?.value || globalThis.TWRoomHash)) TW.ACTIONS['room-join']()
     else if (event.target.id === 'roomWord' && !$('#roomWordButton')?.disabled) submitSetterWord()
     else if (event.target.id === 'finalWord' && !$('#finalSubmit')?.disabled) submitFinalWord()
     else if (event.target.id === 'roomChatInput') { event.preventDefault(); sendChat(event.target.value, room?.chatScope) }

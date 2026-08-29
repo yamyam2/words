@@ -308,6 +308,24 @@ body.watching .mini-line > span { font-size: 13px; min-width: 48px; color: var(-
 .score-list li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
 .score-list li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .score-list li span { color: var(--ink-dim); font-size: 12px; }
+.score-list li.winner { padding-inline: 8px; border-radius: 10px; background: linear-gradient(90deg, rgba(255,200,44,.15), rgba(255,200,44,.03)); }
+.score-list li.winner > strong { color: #ffd75e; }
+.winner-name { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; color: var(--ink); vertical-align: middle; }
+.score-list li .winner-name { color: var(--ink); font-size: inherit; }
+.winner-name .winner-crown { flex: none; color: inherit; font-size: 18px; line-height: 1; overflow: visible; animation: crown-pop .65s cubic-bezier(.2,1.6,.4,1) both; }
+.result-celebration { position: absolute; inset: 0 0 auto; z-index: 3; height: 210px; overflow: hidden; pointer-events: none; }
+.result-celebration i {
+  position: absolute; top: -18px; left: var(--x); width: 8px; height: 14px; border-radius: 2px;
+  background: #ffd43b; opacity: 0; animation: confetti-fall 1.15s cubic-bezier(.15,.7,.35,1) var(--delay) both;
+}
+.result-celebration i:nth-child(3n + 2) { background: #ff6b9d; border-radius: 50%; }
+.result-celebration i:nth-child(3n) { background: #63e6be; width: 11px; height: 7px; }
+@keyframes crown-pop { 0% { opacity: 0; transform: translateY(-12px) scale(.4) rotate(-18deg); } 70% { opacity: 1; transform: translateY(1px) scale(1.18) rotate(5deg); } 100% { opacity: 1; transform: none; } }
+@keyframes confetti-fall { 0% { opacity: 0; transform: translate3d(0,-12px,0) rotate(0); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate3d(var(--drift),205px,0) rotate(540deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .result-celebration { display: none; }
+  .winner-name .winner-crown { animation: none; }
+}
 .team-score li.red { border-left: 3px solid #df6868; padding-left: 8px; }
 .team-score li.blue { border-left: 3px solid #5b8ab8; padding-left: 8px; }
 .team-score li b small { display: block; color: var(--ink-dim); font-size: 10px; font-weight: 400; }

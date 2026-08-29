@@ -199,7 +199,10 @@ try {
   if (!await a.evaluate(`!Room.current.chatOpen && document.querySelector('#quickChat .chat-panel') === null`)) throw new Error('게임 채팅 바깥을 눌러도 닫히지 않습니다')
   await a.evaluate(`document.querySelector('#quickChat [data-act=room-force]').click()`)
   await Promise.all([waitFor(a, `document.querySelector('.score-list') !== null`), waitFor(b, `document.querySelector('.score-list') !== null`)])
+  const winnerDisplay = await a.evaluate(`({ crowned: document.querySelector('.score-list li.winner .winner-crown')?.textContent, name: document.querySelector('.score-list li.winner b')?.textContent, celebration: !!document.querySelector('.result-celebration') })`)
+  if (winnerDisplay.crowned !== '👑' || !winnerDisplay.name.includes('A') || !winnerDisplay.celebration) throw new Error('결과창 1위 왕관·축하 효과 실패: ' + JSON.stringify(winnerDisplay))
   ok('완주자 관전에서 실제 추측 확인 · 고정 응원 · 자유 채팅 · 즉시 종료')
+  ok('멀티 결과창 → 1위 별명 왕관 · 축하 효과')
 
   async function createMode(kind, size = 4, rounds = 1) {
     await b.evaluate(`TW.GOES.leave()`)

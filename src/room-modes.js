@@ -1196,6 +1196,18 @@
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
   }
 
+  function crownedName(name) {
+    return `<span class="winner-name"><span class="winner-crown" aria-hidden="true">👑</span>${esc(name)}</span>`
+  }
+  function celebration(show) {
+    if (!show) return ''
+    const pieces = Array.from({ length: 14 }, (_, i) => `<i style="--x:${5 + i * 7}%;--delay:${(i * .035).toFixed(3)}s;--drift:${(i % 2 ? 1 : -1) * (10 + i)}px"></i>`).join('')
+    return `<div class="result-celebration" aria-hidden="true">${pieces}</div>`
+  }
+  function sameResultRank(a, b) {
+    return Boolean(a && b && a.status === b.status && (a.ms ?? null) === (b.ms ?? null) && (a.tries ?? null) === (b.tries ?? null))
+  }
+
   TW.SHEETS.scoreboard = () => {
     if (!room) return '<h2>결과를 찾지 못했어요</h2>'
     if (isTeamMode()) {
@@ -1204,14 +1216,15 @@
       const myTeam = room.teams.get(room.me.pid)
       const personalWin = winner && (room.isSpy ? winner !== myTeam : winner === myTeam)
       const personalTitle = room.kind === 'spy' ? personalWin ? room.isSpy ? '스파이 개인 승리!' : '팀원 승리!' : winner ? room.isSpy ? '스파이 작전 실패' : '이번에는 패배했어요' : '무승부' : winner ? `${TEAM_NAMES[winner]} 승리!` : '무승부'
-      return `<h2>${personalTitle}</h2>
+      return `${celebration(Boolean(winner))}<h2>${personalTitle}</h2>
         <div class="answer-reveal"><b>${room.kind === 'teamsetter' ? `빨강팀 문제 ${esc(room.teamAnswers?.red || '')} · 파랑팀 문제 ${esc(room.teamAnswers?.blue || '')}` : esc(room.answer || '')}</b><span>${MODES[room.kind]} · ${room.size}칸${winner ? ` · ${TEAM_NAMES[winner]} 승리` : ''}</span></div>
         <ol class="score-list team-score">${results.map((result, index) => {
           const members = teamMembers(result.team).map((pid) => playerName(pid)).join(', ')
           const spy = room.kind === 'spy' ? room.spies[result.team] : null
           const roster = `${members}${spy ? ` · 스파이: ${playerName(spy)}` : ''}`
           const outcome = result.status === 'won' ? `정규 ${result.tries}번째 성공 · ${(result.ms / 1000).toFixed(1)}초` : result.status === 'final' ? `마지막 기회 ${result.correctCount}/${result.total}명 · 정답률 ${Math.round(result.accuracy * 100)}%` : '정답자 없음'
-          return `<li class="${result.team}"><strong>${winner === result.team ? '1' : winner ? '2' : '—'}</strong><b>${TEAM_NAMES[result.team]}<small>${esc(roster)}</small></b><span>${outcome}</span></li>`
+          const teamWon = winner === result.team
+          return `<li class="${result.team}${teamWon ? ' winner' : ''}"><strong>${teamWon ? '1' : winner ? '2' : '—'}</strong><b>${teamWon ? crownedName(TEAM_NAMES[result.team]) : esc(TEAM_NAMES[result.team])}<small>${esc(roster)}</small></b><span>${outcome}</span></li>`
         }).join('')}</ol>${room.kind === 'spy' ? `<p class="muted spy-reveal">${room.isSpy ? `내가 들어간 ${TEAM_NAMES[myTeam]}이 ${winner === myTeam ? '이겨서 작전 실패' : winner ? '져서 작전 성공' : '비겨서 작전 실패'}했어요.` : '게임 종료 후 양 팀의 스파이를 공개했어요.'}</p>` : ''}<div class="sheet-actions">${rematchControls()}<button class="btn accent" data-act="room-copy-result">결과 복사하기</button><button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     if (room.kind === 'coop') {
@@ -1220,35 +1233,53 @@
       const finalResults = (room.coopResult?.finalResults || []).slice().sort((a, b) => a.status === 'won' && b.status !== 'won' ? -1 : a.status !== 'won' && b.status === 'won' ? 1 : a.status === 'won' ? a.ms - b.ms : room.participants.indexOf(a.pid) - room.participants.indexOf(b.pid))
       const winnerCount = finalResults.filter((result) => result.status === 'won').length
       const soloWin = finalResults.length === 1 && winnerCount === 1
-      const title = soloWin ? '마지막 기회 성공!' : winner ? `${esc(winner)}님 1위!` : won ? '함께 맞혔어요!' : '이번에는 아쉬워요'
+      const fastestMs = finalResults.find((result) => result.status === 'won')?.ms
+      const fastestCount = finalResults.filter((result) => result.status === 'won' && result.ms === fastestMs).length
+      const title = soloWin ? '마지막 기회 성공!' : fastestCount > 1 ? '공동 1위!' : winner ? `${crownedName(winner)}님 1위!` : won ? '함께 맞혔어요!' : '이번에는 아쉬워요'
       const detail = room.coopResult?.finalChance ? `정규 ${room.maxTries}회 실패 후 마지막 기회 · ${winnerCount}/${finalResults.length}명 정답` : soloWin ? '마지막 기회에서 정답을 맞혔어요' : winner ? `정답자 ${winnerCount}명 · 빠른 순서` : won ? `${room.coopResult.tries}/${room.maxTries}번 만에 성공` : `정답 · ${room.size}칸`
-      let rank = 0
+      let seenWinners = 0; let rank = 0; let previousMs = null
       const ranking = room.coopResult?.finalChance ? `<ol class="score-list">${finalResults.map((result) => {
-        const place = result.status === 'won' ? ++rank : '—'
+        if (result.status === 'won') {
+          if (result.ms !== previousMs) rank = seenWinners + 1
+          seenWinners++; previousMs = result.ms
+        }
+        const place = result.status === 'won' ? rank : '—'
         const outcome = result.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초` : result.status === 'timeout' ? '미제출' : '오답'
-        return `<li><strong>${place}</strong><b>${esc(playerName(result.pid))}${result.pid === room.me.pid ? ' (나)' : ''}</b><span>${outcome}</span></li>`
+        const first = place === 1
+        return `<li class="${first ? 'winner' : ''}"><strong>${place}</strong><b>${first ? crownedName(playerName(result.pid)) : esc(playerName(result.pid))}${result.pid === room.me.pid ? ' (나)' : ''}</b><span>${outcome}</span></li>`
       }).join('')}</ol>` : ''
-      return `<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${detail}</span></div>${ranking}<div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
+      return `${celebration(won)}<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${detail}</span></div>${ranking}<div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     if (room.kind === 'captain') {
       const names = displayNames(); const champion = room.captainChampion
       const hostEliminated = room.host && room.captainEliminated.includes(room.me.pid)
-      const title = champion ? `${esc(playerName(champion))}님이 최후의 대장!` : hostEliminated ? '탈락했지만 방장으로 남아있어요' : `${room.round}판 종료 · ${room.captainAlive.length}명 생존`
-      return `<h2>${title}</h2>${hostEliminated && !champion ? '<p class="muted">방을 나가지 않았어요. 다음 판을 시작하고 끝까지 관전할 수 있습니다.</p>' : ''}<div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.captainEliminated.length ? `이번 판 탈락: ${room.captainEliminated.map((pid) => esc(playerName(pid))).join(', ')}` : '탈락자 없음'}</span></div>
-        <ol class="score-list">${room.scoreResults.map((r, i) => `<li class="${room.captainEliminated.includes(r.pid) ? 'eliminated' : ''}"><strong>${i + 1}</strong><b>${esc(names.get(r.pid) || '나간 참가자')}${room.captainEliminated.includes(r.pid) ? ' · 탈락' : ' · 생존'}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>`).join('')}</ol>
+      const topResult = room.scoreResults[0]
+      const roundWinner = champion || topResult?.pid
+      const title = champion ? `${crownedName(playerName(champion))}님이 최후의 대장!` : hostEliminated ? '탈락했지만 방장으로 남아있어요' : `${room.round}판 종료 · ${room.captainAlive.length}명 생존`
+      return `${celebration(Boolean(roundWinner))}<h2>${title}</h2>${hostEliminated && !champion ? '<p class="muted">방을 나가지 않았어요. 다음 판을 시작하고 끝까지 관전할 수 있습니다.</p>' : ''}<div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.captainEliminated.length ? `이번 판 탈락: ${room.captainEliminated.map((pid) => esc(playerName(pid))).join(', ')}` : '탈락자 없음'}</span></div>
+        <ol class="score-list">${room.scoreResults.map((r, i) => { const first = champion ? r.pid === champion : sameResultRank(r, topResult); return `<li class="${room.captainEliminated.includes(r.pid) ? 'eliminated ' : ''}${first ? 'winner' : ''}"><strong>${first ? 1 : i + 1}</strong><b>${first ? crownedName(names.get(r.pid) || '나간 참가자') : esc(names.get(r.pid) || '나간 참가자')}${room.captainEliminated.includes(r.pid) ? ' · 탈락' : ' · 생존'}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>` }).join('')}</ol>
         <div class="sheet-actions">${champion ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">생존자 다음 판</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     const names = displayNames(); const relay = room.kind === 'relay'
-    return `<h2>${relay ? `${room.round}/${room.roundsTotal} 라운드 결과` : '대결 결과'}</h2>
+    const topResult = room.scoreResults[0]
+    return `${celebration(Boolean(topResult))}<h2>${relay ? `${room.round}/${room.roundsTotal} 라운드 결과` : '대결 결과'}</h2>
       <div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.size}칸</span></div>
-      <ol class="score-list">${room.scoreResults.map((r, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(r.pid) || '나간 참가자')}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>`).join('')}</ol>
+      <ol class="score-list">${room.scoreResults.map((r, i) => { const first = sameResultRank(r, topResult); return `<li class="${first ? 'winner' : ''}"><strong>${first ? 1 : i + 1}</strong><b>${first ? crownedName(names.get(r.pid) || '나간 참가자') : esc(names.get(r.pid) || '나간 참가자')}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>` }).join('')}</ol>
       <div class="sheet-actions">${relay && room.final ? '<button class="btn primary" data-act="room-standings">최종 순위 보기</button>' : relay && room.host ? '<button class="btn primary" data-act="room-next">다음 라운드</button>' : relay ? '<p class="muted">방장이 다음 라운드를 시작하기를 기다리는 중…</p>' : rematchControls()}<button class="btn accent" data-act="room-copy-result">결과 복사하기</button><button class="btn ghost" data-go="leave">나가기</button></div>`
   }
   TW.SHEETS.standings = () => {
     if (!room) return '<h2>순위를 찾지 못했어요</h2>'
     const names = displayNames()
     const list = Array.from(room.totals, ([pid, points]) => ({ pid, points: Number(points) || 0 })).sort((a, b) => b.points - a.points || (names.get(a.pid) || '').localeCompare(names.get(b.pid) || ''))
-    return `<h2>최종 순위</h2><ol class="score-list">${list.map((e, i) => `<li><strong>${i + 1}</strong><b>${esc(names.get(e.pid) || '나간 참가자')}</b><span>${e.points}점</span></li>`).join('')}</ol><div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
+    const topPoints = list[0]?.points
+    let previousPoints = null; let place = 0
+    const rows = list.map((e, i) => {
+      if (e.points !== previousPoints) place = i + 1
+      previousPoints = e.points
+      const first = place === 1
+      return `<li class="${first ? 'winner' : ''}"><strong>${place}</strong><b>${first ? crownedName(names.get(e.pid) || '나간 참가자') : esc(names.get(e.pid) || '나간 참가자')}</b><span>${e.points}점</span></li>`
+    }).join('')
+    return `${celebration(list.length > 0 && topPoints !== undefined)}<h2>최종 순위</h2><ol class="score-list">${rows}</ol><div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
   }
   function showStandings() { if (room) { room.resultSheet = 'standings'; TW.openSheet('standings') } }
   function nextRound() {

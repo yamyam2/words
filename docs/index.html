@@ -1855,8 +1855,6 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     TW.closeSheet(); $('#home').hidden = true; $('#game').hidden = true; $('#lobby').hidden = false
     room.chatScope = 'all'
     $('#roomCode').textContent = room.code
-    const base = TW.shareUrl()
-    $('#roomInvite').innerHTML = `<div class="room-invite">${base ? `<textarea class="linkbox" readonly>${esc(inviteText())}</textarea>` : '<p class="muted" style="text-align:left;flex:1">게임 주소와 이 코드를 함께 보내세요.</p>'}<button class="btn ghost" data-act="room-copy">${base ? '링크 복사' : '코드 복사'}</button></div>`
     renderLobby()
   }
   function renderLobby() {
@@ -1865,6 +1863,12 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const names = displayNames()
     const choose = room.host && room.kind === 'setter' && !room.startedAt
     const chooseTeam = room.host && isTeamMode() && !room.startedAt && !room.teamsHidden
+    const invite = $('#roomInvite')
+    if (invite) {
+      const base = TW.shareUrl()
+      invite.hidden = !room.host
+      invite.innerHTML = room.host ? `<div class="room-invite">${base ? `<textarea class="linkbox" readonly>${esc(inviteText())}</textarea>` : '<p class="muted" style="text-align:left;flex:1">게임 주소와 이 코드를 함께 보내세요.</p>'}<button class="btn ghost" data-act="room-copy">${base ? '링크 복사' : '코드 복사'}</button></div>` : ''
+    }
     $('#roomCount').textContent = `${list.length}명`
     $('#roomRoster').innerHTML = list.map((p) => {
       const selected = p.pid === room.setterPid
@@ -1902,7 +1906,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       startedAt: null, answer: null, over: false, final: false, scoreResults: [],
       setterPid: resume?.setterPid || me.pid, turnPid: resume?.turnPid || null, pick: null, resume: resume || null,
       waitEndsAt: null, coopPending: false, finalChance: null, maxTries: TW.MAX_TRIES,
-      readyPids: new Set(), readyVoters: new Set(), resultSheet: 'scoreboard', messages: [], chatOpen: false, chatScope: 'all', lastChatAt: 0,
+      readyPids: new Set(), readyVoters: new Set(), resultSheet: 'scoreboard', messages: [], chatOpen: false, chatScope: 'all', lobbyChatAutoOpened: false, lastChatAt: 0,
       teams: new Map(), teamsHidden: false, hiddenRosterKey: '', teamSetters: { red: null, blue: null }, teamPicks: null, teamAnswers: null,
       teamBoards: { red: [], blue: [] }, teamTurns: { red: null, blue: null }, teamStatus: { red: 'waiting', blue: 'waiting' },
       teamMaxTries: { red: TW.MAX_TRIES, blue: TW.MAX_TRIES }, teamFinishMs: { red: null, blue: null }, teamFinals: { red: null, blue: null }, teamPending: false, teamDeadline: null, teamResult: null, teamWinner: null,
@@ -1983,6 +1987,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     }
     for (const p of room.peers.values()) p.online = online.has(p.pid)
     room.hostPid = Net.electHost(roster); room.host = room.hostPid === room.me.pid
+    if (!room.startedAt && !room.host && !room.lobbyChatAutoOpened) { room.lobbyChatAutoOpened = true; room.chatOpen = true; room.chatScope = 'all' }
     if (!room.setterPid || !room.peers.get(room.setterPid)?.online) room.setterPid = room.hostPid
     const rosterKey = onlinePlayers().map((p) => p.pid).sort().join('|')
     if (room.host && room.teamsHidden && !room.startedAt && rosterKey !== room.hiddenRosterKey) randomizeTeams()
@@ -2278,7 +2283,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       ? `<div class="chat-tabs"><button data-chat-scope="all" aria-pressed="${room.chatScope === 'all'}">전체</button><button data-chat-scope="team" aria-pressed="${room.chatScope === 'team'}">우리 팀</button></div>` : ''
     const messages = room.messages.filter((message) => message.scope === 'all' || inGame && message.team === room.teams.get(room.me.pid)).slice(-30)
     const panel = room.chatOpen ? `<div class="chat-panel">${scopes}<div class="chat-messages">${messages.length ? messages.map((message) => `<p class="${message.pid === room.me.pid ? 'mine' : ''}"><b>${esc(playerName(message.pid))}</b><span>${esc(message.text)}</span></p>`).join('') : '<p class="chat-empty">아직 메시지가 없어요</p>'}</div><div class="chat-form"><input class="field" id="roomChatInput" maxlength="60" placeholder="메시지 입력" autocomplete="off"><button class="btn primary" data-act="room-chat-send">보내기</button></div></div>` : ''
-    bar.innerHTML = `<div class="quick-actions">${QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('')}<button class="chip chat-toggle" data-act="room-chat-toggle" aria-pressed="${room.chatOpen}">채팅${room.messages.length ? ` ${room.messages.length}` : ''}</button>${force}</div>${panel}`
+    const quickMessages = inLobby ? '' : QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('')
+    bar.innerHTML = `<div class="quick-actions">${quickMessages}<button class="chip chat-toggle" data-act="room-chat-toggle" aria-pressed="${room.chatOpen}">채팅${room.messages.length ? ` ${room.messages.length}` : ''}</button>${force}</div>${panel}`
     bar.hidden = false
     if (room.chatOpen) requestAnimationFrame(() => { const box = bar.querySelector('.chat-messages'); if (box) box.scrollTop = box.scrollHeight })
   }

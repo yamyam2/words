@@ -148,6 +148,7 @@
   }
   function showLobby() {
     TW.closeSheet(); $('#home').hidden = true; $('#game').hidden = true; $('#lobby').hidden = false
+    room.chatScope = 'all'
     $('#roomCode').textContent = room.code
     const base = TW.shareUrl()
     $('#roomInvite').innerHTML = `<div class="room-invite">${base ? `<textarea class="linkbox" readonly>${esc(inviteText())}</textarea>` : '<p class="muted" style="text-align:left;flex:1">게임 주소와 이 코드를 함께 보내세요.</p>'}<button class="btn ghost" data-act="room-copy">${base ? '링크 복사' : '코드 복사'}</button></div>`
@@ -179,6 +180,7 @@
       ? `<p class="muted">${detail}${hiddenNotice}${choose ? '<br>아래에서 출제자를 선택한 뒤 시작하세요.' : chooseTeam ? '<br>참가자를 두 팀으로 나눈 뒤 시작하세요.' : ''}</p>${teamControls}<button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
       : `<p class="muted">${detail}${hiddenNotice}<br>방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
     $('#lobbyStatus').textContent = ({ off: '오프라인', connecting: '연결하는 중…', live: '연결됨', retry: '다시 연결하는 중…', down: '연결을 기다리는 중…' })[Net.status] || Net.status
+    renderQuickChat()
   }
   function enterRoom(code, nick, options, resume) {
     const old = savedPlayer()
@@ -213,7 +215,7 @@
     teamEndTimer = teamFinalTimers.red = teamFinalTimers.blue = teamSkipTimers.red = teamSkipTimers.blue = null
     Net.leave(); room = null; TW.store.set('tw.room.v1', null)
     document.body.classList.remove('watching')
-    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#finalChance').hidden = true
+    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#lobbyChat').hidden = true; $('#finalChance').hidden = true
     $('#btnBack').dataset.go = 'home'; $('#btnMenu').dataset.sheet = 'stats'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '기록')
     TW.GOES.home()
   }
@@ -537,6 +539,7 @@
     else if (room.kind === 'coop') text = room.turnPid === room.me.pid ? '내 차례예요' : `지금은 ${playerName(room.turnPid)}님 차례`
     else if (room.me.role === 'finished') text = room.waitEndsAt ? '완료! 남은 참가자를 응원해 주세요' : '완료! 다른 참가자의 보드를 보고 있어요'
     else if (room.me.role === 'setter') text = `내가 낸 정답: ${room.answer}`
+    else if (room.kind === 'captain' && room.me.role === 'spectator' && !room.captainAlive.includes(room.me.pid)) text = room.host ? '탈락했지만 방장으로 남아 관전 중 · 다음 판 진행 권한을 유지해요' : '탈락 후 방에 남아 관전 중이에요'
     else if (room.me.role === 'spectator') text = '이번 라운드는 관전 중이에요'
     banner.textContent = text; banner.hidden = !text
   }
@@ -556,12 +559,19 @@
     TW.toast(room.me.role !== 'player' ? '이번 라운드는 관전 중이에요' : room.coopPending || room.teamPending ? '제출을 확인하는 중이에요' : `${playerName(team ? room.teamTurns[team] : room.turnPid)}님 차례예요`)
   }
   function renderQuickChat() {
-    const bar = $('#quickChat')
-    if (!bar || !room?.startedAt || room.over) { if (bar) bar.hidden = true; return }
-    const force = room.host && room.kind !== 'coop' && !isTeamMode() ? '<button class="btn accent" data-act="room-force">지금 결과 보기</button>' : ''
-    const scopes = isTeamMode() && room.teams.has(room.me.pid)
+    const gameBar = $('#quickChat'); const lobbyBar = $('#lobbyChat')
+    if (gameBar) gameBar.hidden = true
+    if (lobbyBar) lobbyBar.hidden = true
+    if (!room || room.over) return
+    const inLobby = !$('#lobby').hidden && !room.startedAt
+    const inGame = Boolean(room.startedAt && !$('#game').hidden)
+    if (!inLobby && !inGame) return
+    const bar = inLobby ? lobbyBar : gameBar
+    if (!bar) return
+    const force = inGame && room.host && room.kind !== 'coop' && !isTeamMode() ? '<button class="btn accent" data-act="room-force">지금 결과 보기</button>' : ''
+    const scopes = inGame && isTeamMode() && room.teams.has(room.me.pid)
       ? `<div class="chat-tabs"><button data-chat-scope="all" aria-pressed="${room.chatScope === 'all'}">전체</button><button data-chat-scope="team" aria-pressed="${room.chatScope === 'team'}">우리 팀</button></div>` : ''
-    const messages = room.messages.filter((message) => message.scope === 'all' || message.team === room.teams.get(room.me.pid)).slice(-30)
+    const messages = room.messages.filter((message) => message.scope === 'all' || inGame && message.team === room.teams.get(room.me.pid)).slice(-30)
     const panel = room.chatOpen ? `<div class="chat-panel">${scopes}<div class="chat-messages">${messages.length ? messages.map((message) => `<p class="${message.pid === room.me.pid ? 'mine' : ''}"><b>${esc(playerName(message.pid))}</b><span>${esc(message.text)}</span></p>`).join('') : '<p class="chat-empty">아직 메시지가 없어요</p>'}</div><div class="chat-form"><input class="field" id="roomChatInput" maxlength="60" placeholder="메시지 입력" autocomplete="off"><button class="btn primary" data-act="room-chat-send">보내기</button></div></div>` : ''
     bar.innerHTML = `<div class="quick-actions">${QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('')}<button class="chip chat-toggle" data-act="room-chat-toggle" aria-pressed="${room.chatOpen}">채팅${room.messages.length ? ` ${room.messages.length}` : ''}</button>${force}</div>${panel}`
     bar.hidden = false
@@ -579,7 +589,7 @@
     const text = String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60)
     if (!text || Date.now() - room.lastChatAt < 700) return
     const team = room.teams.get(room.me.pid)
-    const safeScope = isTeamMode() && team && scope === 'team' ? 'team' : 'all'
+    const safeScope = room.startedAt && isTeamMode() && team && scope === 'team' ? 'team' : 'all'
     const payload = { id: `${room.me.pid}:${Date.now()}`, pid: room.me.pid, text, scope: safeScope, team: safeScope === 'team' ? team : null, round: room.round }
     room.lastChatAt = Date.now(); onChat(payload); Net.send('chat', payload)
     const input = $('#roomChatInput'); if (input) input.value = ''
@@ -1213,8 +1223,9 @@
     }
     if (room.kind === 'captain') {
       const names = displayNames(); const champion = room.captainChampion
-      const title = champion ? `${esc(playerName(champion))}님이 최후의 대장!` : `${room.round}판 종료 · ${room.captainAlive.length}명 생존`
-      return `<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.captainEliminated.length ? `이번 판 탈락: ${room.captainEliminated.map((pid) => esc(playerName(pid))).join(', ')}` : '탈락자 없음'}</span></div>
+      const hostEliminated = room.host && room.captainEliminated.includes(room.me.pid)
+      const title = champion ? `${esc(playerName(champion))}님이 최후의 대장!` : hostEliminated ? '탈락했지만 방장으로 남아있어요' : `${room.round}판 종료 · ${room.captainAlive.length}명 생존`
+      return `<h2>${title}</h2>${hostEliminated && !champion ? '<p class="muted">방을 나가지 않았어요. 다음 판을 시작하고 끝까지 관전할 수 있습니다.</p>' : ''}<div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.captainEliminated.length ? `이번 판 탈락: ${room.captainEliminated.map((pid) => esc(playerName(pid))).join(', ')}` : '탈락자 없음'}</span></div>
         <ol class="score-list">${room.scoreResults.map((r, i) => `<li class="${room.captainEliminated.includes(r.pid) ? 'eliminated' : ''}"><strong>${i + 1}</strong><b>${esc(names.get(r.pid) || '나간 참가자')}${room.captainEliminated.includes(r.pid) ? ' · 탈락' : ' · 생존'}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>`).join('')}</ol>
         <div class="sheet-actions">${champion ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">생존자 다음 판</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
@@ -1451,6 +1462,8 @@
   }
 
   document.addEventListener('click', (event) => {
+    const insideChat = event.composedPath().some((node) => node?.classList?.contains('quick-chat'))
+    if (room?.chatOpen && !insideChat) { room.chatOpen = false; renderQuickChat() }
     const category = event.target.closest('[data-room-category]')
     if (category && ['solo', 'team'].includes(category.dataset.roomCategory)) {
       const nick = $('#roomNick')?.value || ''

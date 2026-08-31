@@ -311,6 +311,10 @@ body.watching .mini-line > span { font-size: 13px; min-width: 48px; color: var(-
 .score-list li span { color: var(--ink-dim); font-size: 12px; }
 .score-list li.winner { padding-inline: 8px; border-radius: 10px; background: linear-gradient(90deg, rgba(255,200,44,.15), rgba(255,200,44,.03)); }
 .score-list li.winner > strong { color: #ffd75e; }
+.score-list li.eliminated { opacity: .62; }
+.tournament-score li { grid-template-columns: 42px 1fr auto; }
+.tournament-score li > strong { font-size: 10px; }
+.tournament-score li b small { display: block; color: var(--ink-dim); font-size: 10px; font-weight: 400; }
 .winner-name { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; color: var(--ink); vertical-align: middle; }
 .score-list li .winner-name { color: var(--ink); font-size: inherit; }
 .winner-name .winner-crown { flex: none; color: inherit; font-size: 18px; line-height: 1; overflow: visible; animation: crown-pop .65s cubic-bezier(.2,1.6,.4,1) both; }

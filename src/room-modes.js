@@ -9,8 +9,8 @@
   const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   const TO_WIRE = { absent: '0', present: '1', correct: '2' }
   const FROM_WIRE = ['absent', 'present', 'correct']
-  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '대장전' }
-  const MODE_GROUPS = { solo: ['versus', 'setter', 'relay'], team: ['coop', 'team', 'teamsetter', 'spy', 'captain'] }
+  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', captain: '서바이벌', tournament: '토너먼트', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전' }
+  const MODE_GROUPS = { solo: ['versus', 'setter', 'relay', 'captain', 'tournament'], team: ['coop', 'team', 'teamsetter', 'spy'] }
   const TEAM_NAMES = { red: '빨강팀', blue: '파랑팀' }
   const isTeamMode = (kind = room?.kind) => ['team', 'teamsetter', 'spy'].includes(kind)
   const QUICK_MESSAGES = ['ㅋㅋㅋ', '화이팅!', '오 거의 다 왔다!', '천천히 해도 돼']
@@ -65,7 +65,7 @@
       guesses: state?.room === room.code ? state.guesses.map((g) => H.encode(g)) : [],
       status: state?.room === room.code ? state.status : 'playing',
       setterPid: room.setterPid, turnPid: room.turnPid, totals: totalsObject(), waitSeconds: room.waitSeconds,
-      eliminateCount: room.eliminateCount, captainAlive: room.captainAlive,
+      eliminateCount: room.eliminateCount, captainAlive: room.captainAlive, tournamentAlive: room.tournamentAlive,
     })
   }
 
@@ -91,7 +91,7 @@
     <div ${draft.kind === 'relay' ? '' : 'hidden'}><p><b>라운드</b></p><div class="room-options">${[1, 3, 5].map((n) => `<button class="chip" data-rounds="${n}" aria-pressed="${draft.roundsTotal === n}">${n}라운드</button>`).join('')}</div></div>
     <div ${draft.kind === 'captain' ? '' : 'hidden'}><p><b>매 판 탈락 인원</b></p><div class="room-options">${[1, 2].map((n) => `<button class="chip" data-eliminate="${n}" aria-pressed="${draft.eliminateCount === n}">${n}명씩 탈락</button>`).join('')}</div></div>
     <div ${['coop', 'team', 'teamsetter', 'spy'].includes(draft.kind) ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
-    <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '여러 판 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : draft.kind === 'team' ? '두 팀이 공유 보드로 풀며, 마지막 기회는 팀 정답률로 승부합니다.' : draft.kind === 'teamsetter' ? '각 팀 출제자가 상대 팀이 풀 서로 다른 단어를 냅니다.' : draft.kind === 'spy' ? '각 팀에 숨어든 스파이는 자기 팀이 져야 개인 승리합니다.' : draft.kind === 'captain' ? '매 판 최하위가 탈락하고 마지막 한 명이 우승합니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
+    <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '여러 판 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'captain' ? '오답자는 모두 탈락하고, 전원이 맞히면 느린 참가자가 탈락합니다.' : draft.kind === 'tournament' ? '매 라운드 1대1로 겨뤄 이긴 사람만 다음 대진에 진출합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : draft.kind === 'team' ? '두 팀이 공유 보드로 풀며, 마지막 기회는 팀 정답률로 승부합니다.' : draft.kind === 'teamsetter' ? '각 팀 출제자가 상대 팀이 풀 서로 다른 단어를 냅니다.' : draft.kind === 'spy' ? '각 팀에 숨어든 스파이는 자기 팀이 져야 개인 승리합니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
     <div class="sheet-actions"><button class="btn primary" data-act="room-create">방 만들기</button></div>`
   TW.SHEETS.roommenu = () => {
     if (!room) return '<h2>방을 찾지 못했어요</h2>'
@@ -180,7 +180,7 @@
       return `<li><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b>${teamRole}<span>${role}</span>${pick}${teamPick}${teamSetterPick}</li>`
     }).join('')
     const wait = room.kind === 'spy' ? ' · 제한시간 없음' : isTeamMode() ? ' · 선두 팀 후 30초' : room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
-    const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : room.kind === 'captain' ? ` · 매 판 ${room.eliminateCount}명 탈락` : ''}${wait}`
+    const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : room.kind === 'captain' ? ` · 매 판 최소 ${room.eliminateCount}명 탈락` : room.kind === 'tournament' ? ' · 1대1 진출전' : ''}${wait}`
     const teamControls = room.host && isTeamMode() ? `<div class="sheet-actions team-lobby-actions">${room.teamsHidden ? '<button class="btn" data-act="room-manual-teams">수동 배정으로 바꾸기</button>' : '<button class="btn accent" data-act="room-random-teams">랜덤 팀 · 비공개</button>'}</div>` : ''
     const hiddenNotice = isTeamMode() && room.teamsHidden ? '<br><b>비밀 팀 배정 완료</b> · 게임이 시작되면 공개됩니다.' : ''
     $('#lobbyActions').innerHTML = room.host
@@ -210,6 +210,7 @@
       teamMaxTries: { red: TW.MAX_TRIES, blue: TW.MAX_TRIES }, teamFinishMs: { red: null, blue: null }, teamFinals: { red: null, blue: null }, teamPending: false, teamDeadline: null, teamResult: null, teamWinner: null,
       spies: { red: null, blue: null }, isSpy: false,
       captainAlive: [], captainEliminated: [], captainChampion: null,
+      tournamentAlive: [], tournamentPairs: [], tournamentByes: [], tournamentEliminated: [], tournamentChampion: null,
     }
     globalThis.TWRoomHash = null
     persistRoom(); showLobby()
@@ -297,6 +298,7 @@
     }
     if (room.kind === 'coop' && room.startedAt && !room.over) scheduleTurnSkip()
     if (isTeamMode() && room.startedAt && !room.over) scheduleTeamSkips()
+    settleDisconnectedPlayers()
     if (room.host && room.finalChance?.active && !room.over) {
       clearTimeout(finalTimer)
       finalTimer = setTimeout(finishFinalChance, Math.max(0, room.finalChance.endsAt - Date.now()))
@@ -322,13 +324,29 @@
   }
   function resolvedRoomSize() { return room.size === 0 ? TW.SIZES[Math.floor(Math.random() * TW.SIZES.length)] : room.size }
   function roundParticipants(setterPid) { return onlinePlayers().filter((p) => p.pid !== setterPid).map((p) => p.pid) }
+  function prepareTournamentRound() {
+    const seeded = room.tournamentAlive.slice()
+    const byes = []
+    if (seeded.length % 2) byes.push(...seeded.splice((room.round - 1) % seeded.length, 1))
+    const pairs = []
+    for (let i = 0; i < seeded.length; i += 2) pairs.push([seeded[i], seeded[i + 1]])
+    room.tournamentPairs = pairs; room.tournamentByes = byes; room.tournamentEliminated = []
+  }
   function startRound() {
     if (!room?.host || Net.status !== 'live') return
     clearTimeout(nextTimer)
     const size = resolvedRoomSize()
     if (room.kind === 'captain' && !room.captainAlive.length) {
       room.captainAlive = onlinePlayers().map((p) => p.pid)
-      if (room.captainAlive.length < 2) return TW.toast('대장전은 두 명 이상 필요해요')
+      if (room.captainAlive.length < 2) return TW.toast('서바이벌은 두 명 이상 필요해요')
+    }
+    if (room.kind === 'tournament') {
+      if (!room.tournamentAlive.length) {
+        room.tournamentAlive = onlinePlayers().map((p) => p.pid)
+        for (let i = room.tournamentAlive.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [room.tournamentAlive[i], room.tournamentAlive[j]] = [room.tournamentAlive[j], room.tournamentAlive[i]] }
+      }
+      if (room.tournamentAlive.length < 2) return TW.toast('토너먼트는 두 명 이상 필요해요')
+      prepareTournamentRound()
     }
     if (room.kind === 'setter') {
       const setterPid = room.peers.get(room.setterPid)?.online ? room.setterPid : room.hostPid
@@ -350,7 +368,9 @@
   function sendStart(answer, setterPid, size, teamAnswers = null) {
     if (!room?.host) return
     const participants = room.kind === 'captain' && room.captainAlive.length
-      ? room.captainAlive.filter((pid) => room.peers.get(pid)?.online)
+      ? room.captainAlive.slice()
+      : room.kind === 'tournament'
+        ? room.tournamentPairs.flat()
       : roundParticipants(setterPid)
     if (!participants.length) return TW.toast('플레이할 참가자가 없어요')
     if (isTeamMode()) {
@@ -376,6 +396,7 @@
       answer: H.encode(H.decompose(answer)), word: answer, setter: setterPid, participants, maxTries,
       turnPid: room.kind === 'coop' ? participants[0] : null, waitSeconds: room.waitSeconds, ts: Date.now(),
       eliminateCount: room.eliminateCount, captainAlive: room.kind === 'captain' ? participants : null,
+      tournamentAlive: room.kind === 'tournament' ? room.tournamentAlive : null, tournamentPairs: room.kind === 'tournament' ? room.tournamentPairs : null, tournamentByes: room.kind === 'tournament' ? room.tournamentByes : null,
     }
     Net.send('start', payload); beginRound(payload, false)
   }
@@ -472,6 +493,12 @@
       room.eliminateCount = [1, 2].includes(Number(payload.eliminateCount)) ? Number(payload.eliminateCount) : room.eliminateCount
       room.captainAlive = room.participants.slice(); room.captainEliminated = []; room.captainChampion = null
     }
+    if (room.kind === 'tournament') {
+      room.tournamentAlive = Array.from(new Set((Array.isArray(payload.tournamentAlive) ? payload.tournamentAlive : room.participants).map(String)))
+      room.tournamentPairs = (Array.isArray(payload.tournamentPairs) ? payload.tournamentPairs : []).flatMap((pair) => Array.isArray(pair) && pair.length === 2 ? [[String(pair[0]), String(pair[1])]] : [])
+      room.tournamentByes = Array.from(new Set((Array.isArray(payload.tournamentByes) ? payload.tournamentByes : []).map(String)))
+      room.tournamentEliminated = []; room.tournamentChampion = null
+    }
     if (isTeamMode()) {
       room.teamsHidden = false
       room.teams = new Map(Object.entries(payload.teams || {}).filter(([pid, team]) => room.activePids.has(pid) && (team === 'red' || team === 'blue')))
@@ -514,7 +541,7 @@
     const tick = () => {
       if (!room?.startedAt || room.over) return
       const sec = Math.floor((Date.now() - room.startedAt) / 1000)
-      const round = room.kind === 'relay' ? `${room.round}/${room.roundsTotal}R · ` : room.kind === 'captain' ? `${room.round}판 · 생존 ${room.captainAlive.length}명 · ` : ''
+      const round = room.kind === 'relay' ? `${room.round}/${room.roundsTotal}R · ` : room.kind === 'captain' ? `${room.round}판 · 생존 ${room.captainAlive.length}명 · ` : room.kind === 'tournament' ? `토너먼트 ${room.round}R · ${room.tournamentAlive.length}명 · ` : ''
       const left = room.waitEndsAt ? Math.max(0, Math.ceil((room.waitEndsAt - Date.now()) / 1000)) : null
       const ownTeam = isTeamMode() ? room.teams.get(room.me.pid) : null
       const finalState = ownTeam ? room.teamFinals[ownTeam] : room.finalChance
@@ -548,6 +575,8 @@
     else if (room.me.role === 'finished') text = room.waitEndsAt ? '완료! 남은 참가자를 응원해 주세요' : '완료! 다른 참가자의 보드를 보고 있어요'
     else if (room.me.role === 'setter') text = `내가 낸 정답: ${room.answer}`
     else if (room.kind === 'captain' && room.me.role === 'spectator' && !room.captainAlive.includes(room.me.pid)) text = room.host ? '탈락했지만 방장으로 남아 관전 중 · 다음 판 진행 권한을 유지해요' : '탈락 후 방에 남아 관전 중이에요'
+    else if (room.kind === 'tournament' && room.tournamentByes.includes(room.me.pid)) text = '이번 라운드는 부전승! 다음 대진을 기다리며 관전해요'
+    else if (room.kind === 'tournament' && room.me.role === 'spectator' && !room.tournamentAlive.includes(room.me.pid)) text = room.host ? '탈락했지만 방장으로 남아 토너먼트를 진행해요' : '토너먼트 탈락 후 관전 중이에요'
     else if (room.me.role === 'spectator') text = '이번 라운드는 관전 중이에요'
     const myTeam = isTeamMode() ? room.teams.get(room.me.pid) : null
     const myTeamNames = myTeam ? teamMembers(myTeam).map((pid) => `${playerName(pid)}${pid === room.me.pid ? ' (나)' : ''}`).join(', ') : ''
@@ -855,14 +884,20 @@
     if (guess.length !== room.size) return
     const ack = { phase: 'team-final-ack', round: room.round, team, pid, status: guess.join('') === teamAnswerJamo(team).join('') ? 'won' : 'lost', ms: Math.max(0, Date.now() - state.startedAt) }
     Net.send('turn', ack); onTeamFinalAck(ack)
-    if (teamFinalMembers(team).every((id) => state.submitted.has(id))) finishTeamFinal(team)
+    maybeFinishTeamFinal(team)
   }
   function onTeamFinalAck(payload) {
     const team = payload.team; const state = room?.teamFinals?.[team]; const pid = String(payload.pid || '')
     if (!state?.active || Number(payload.round) !== room.round || room.teams.get(pid) !== team || room.kind === 'spy' && Object.values(room.spies).includes(pid) || state.submitted.has(pid)) return
     state.results.set(pid, { pid, status: payload.status === 'won' ? 'won' : 'lost', ms: Math.max(0, Number(payload.ms) || 0) }); state.submitted.add(pid)
     if (pid === room.me.pid) state.localPending = false
-    renderFinalChance(); persistRoom()
+    renderFinalChance(); persistRoom(); maybeFinishTeamFinal(payload.team)
+  }
+  function maybeFinishTeamFinal(team) {
+    const state = room?.teamFinals?.[team]
+    if (!room?.host || !state?.active) return
+    const waitingOnline = teamFinalMembers(team).some((pid) => room.peers.get(pid)?.online && !state.submitted.has(pid))
+    if (!waitingOnline) finishTeamFinal(team)
   }
   function finishTeamFinal(team) {
     if (!room?.host || room.over || !room.teamFinals[team]?.active) return
@@ -917,7 +952,7 @@
     room.teamStatus[payload.team] = 'lost'; room.teamTurns[payload.team] = null
     if (room.teamFinals[payload.team]) room.teamFinals[payload.team].active = false
     if (room.teams.get(room.me.pid) === payload.team) showTeamWaiting()
-    if (room.host) finishTeamMatch()
+    if (room.host) afterTeamTerminal(payload.team)
   }
   function finishTeamMatch() {
     if (!room?.host || room.over) return
@@ -1018,7 +1053,7 @@
       ms: Math.max(0, Date.now() - room.finalChance.startedAt),
     }
     Net.send('turn', ack); onFinalAck(ack)
-    if (Array.from(room.activePids).every((id) => room.finalChance.submitted.has(id))) finishFinalChance()
+    maybeFinishFinalChance()
   }
   function onFinalAck(payload) {
     if (!room?.finalChance?.active || Number(payload.round) !== room.round) return
@@ -1027,7 +1062,12 @@
     room.finalChance.results.set(pid, { pid, status: payload.status === 'won' ? 'won' : 'lost', ms: Math.max(0, Number(payload.ms) || 0) })
     room.finalChance.submitted.add(pid)
     if (pid === room.me.pid) room.finalChance.localPending = false
-    renderFinalChance(); persistRoom()
+    renderFinalChance(); persistRoom(); maybeFinishFinalChance()
+  }
+  function maybeFinishFinalChance() {
+    if (!room?.host || !room.finalChance?.active) return
+    const waitingOnline = Array.from(room.activePids).some((pid) => room.peers.get(pid)?.online && !room.finalChance.submitted.has(pid))
+    if (!waitingOnline) finishFinalChance()
   }
   function onTurn(payload) {
     if (!room || !room.startedAt || room.over) return
@@ -1087,6 +1127,29 @@
   function maybeFinish() {
     if (!room?.host || room.over || !room.activePids.size) return
     if (Array.from(room.activePids).every((pid) => room.results.has(pid))) finishRound()
+    else settleDisconnectedPlayers()
+  }
+  function settleDisconnectedPlayers() {
+    if (!room?.host || !room.startedAt || room.over) return
+    if (room.kind === 'coop') {
+      if (room.finalChance?.active) maybeFinishFinalChance()
+      return
+    }
+    if (isTeamMode()) {
+      for (const team of ['red', 'blue']) {
+        if (room.teamFinals[team]?.active) maybeFinishTeamFinal(team)
+        if (room.teamStatus[team] === 'playing' && !teamMembers(team, true).length) {
+          const payload = { phase: 'team-force', round: room.round, team }
+          Net.send('turn', payload); applyTeamForce(payload)
+        }
+      }
+      return
+    }
+    const unresolved = Array.from(room.activePids).filter((pid) => !room.results.has(pid))
+    if (!unresolved.length || unresolved.some((pid) => room.peers.get(pid)?.online)) return
+    const ms = Math.max(0, Date.now() - room.startedAt)
+    for (const pid of unresolved) room.results.set(pid, { pid, status: 'lost', tries: TW.MAX_TRIES, ms, disconnected: true })
+    finishRound()
   }
   function forceRound() {
     if (!room?.host || room.over) return
@@ -1105,12 +1168,29 @@
     const scores = Array.from(room.results.values())
     if (room.kind === 'captain') {
       const ranked = sortedResults(scores)
-      const dropCount = Math.min(room.eliminateCount, Math.max(0, ranked.length - 1))
-      const eliminated = ranked.slice(ranked.length - dropCount).map((result) => result.pid)
+      const wrong = ranked.filter((result) => result.status !== 'won').map((result) => result.pid)
+      const winners = ranked.filter((result) => result.status === 'won')
+      const extraDropCount = Math.min(Math.max(0, room.eliminateCount - wrong.length), Math.max(0, winners.length - 1))
+      const eliminated = Array.from(new Set([...wrong, ...winners.slice(winners.length - extraDropCount).map((result) => result.pid)]))
       room.captainEliminated = eliminated
-      room.captainAlive = ranked.filter((result) => !eliminated.includes(result.pid)).map((result) => result.pid)
+      room.captainAlive = winners.filter((result) => !eliminated.includes(result.pid)).map((result) => result.pid)
       room.captainChampion = room.captainAlive.length === 1 ? room.captainAlive[0] : null
-      const payload = { round: room.round, scores, totals: {}, final: Boolean(room.captainChampion), captain: true, eliminated, alive: room.captainAlive, champion: room.captainChampion, eliminateCount: room.eliminateCount }
+      const payload = { round: room.round, scores, totals: {}, final: room.captainAlive.length <= 1, captain: true, eliminated, alive: room.captainAlive, champion: room.captainChampion, eliminateCount: room.eliminateCount }
+      Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final, payload)); return
+    }
+    if (room.kind === 'tournament') {
+      const advances = []
+      const eliminated = []
+      const byPid = new Map(scores.map((result) => [result.pid, result]))
+      for (const pair of room.tournamentPairs) {
+        const ranked = sortedResults(pair.map((pid) => byPid.get(pid)).filter(Boolean))
+        if (ranked[0]) advances.push(ranked[0].pid)
+        if (ranked[1]) eliminated.push(ranked[1].pid)
+      }
+      advances.push(...room.tournamentByes)
+      room.tournamentAlive = Array.from(new Set(advances)); room.tournamentEliminated = eliminated
+      room.tournamentChampion = room.tournamentAlive.length === 1 ? room.tournamentAlive[0] : null
+      const payload = { round: room.round, scores, totals: {}, final: Boolean(room.tournamentChampion), tournament: true, pairs: room.tournamentPairs, byes: room.tournamentByes, eliminated, alive: room.tournamentAlive, champion: room.tournamentChampion }
       Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final, payload)); return
     }
     if (room.kind === 'relay') {
@@ -1157,6 +1237,14 @@
       room.captainEliminated = Array.isArray(meta.eliminated) ? meta.eliminated.map(String) : []
       room.captainAlive = Array.isArray(meta.alive) ? meta.alive.map(String) : room.captainAlive
       room.captainChampion = meta.champion ? String(meta.champion) : null
+    }
+    if (room.kind === 'tournament' || meta.tournament) {
+      room.tournamentPairs = (Array.isArray(meta.pairs) ? meta.pairs : Array.isArray(meta.tournamentPairs) ? meta.tournamentPairs : room.tournamentPairs).flatMap((pair) => Array.isArray(pair) && pair.length === 2 ? [[String(pair[0]), String(pair[1])]] : [])
+      room.tournamentByes = (Array.isArray(meta.byes) ? meta.byes : Array.isArray(meta.tournamentByes) ? meta.tournamentByes : room.tournamentByes).map(String)
+      room.tournamentEliminated = (Array.isArray(meta.eliminated) ? meta.eliminated : Array.isArray(meta.tournamentEliminated) ? meta.tournamentEliminated : []).map(String)
+      room.tournamentAlive = (Array.isArray(meta.alive) ? meta.alive : Array.isArray(meta.tournamentAlive) ? meta.tournamentAlive : room.tournamentAlive).map(String)
+      const champion = meta.champion || meta.tournamentChampion
+      room.tournamentChampion = champion ? String(champion) : null
     }
     room.waitEndsAt = null; $('#quickChat').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
@@ -1255,12 +1343,25 @@
     if (room.kind === 'captain') {
       const names = displayNames(); const champion = room.captainChampion
       const hostEliminated = room.host && room.captainEliminated.includes(room.me.pid)
-      const topResult = room.scoreResults[0]
-      const roundWinner = champion || topResult?.pid
-      const title = champion ? `${crownedName(playerName(champion))}님이 최후의 대장!` : hostEliminated ? '탈락했지만 방장으로 남아있어요' : `${room.round}판 종료 · ${room.captainAlive.length}명 생존`
-      return `${celebration(Boolean(roundWinner))}<h2>${title}</h2>${hostEliminated && !champion ? '<p class="muted">방을 나가지 않았어요. 다음 판을 시작하고 끝까지 관전할 수 있습니다.</p>' : ''}<div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.captainEliminated.length ? `이번 판 탈락: ${room.captainEliminated.map((pid) => esc(playerName(pid))).join(', ')}` : '탈락자 없음'}</span></div>
-        <ol class="score-list">${room.scoreResults.map((r, i) => { const first = champion ? r.pid === champion : sameResultRank(r, topResult); return `<li class="${room.captainEliminated.includes(r.pid) ? 'eliminated ' : ''}${first ? 'winner' : ''}"><strong>${first ? 1 : i + 1}</strong><b>${first ? crownedName(names.get(r.pid) || '나간 참가자') : esc(names.get(r.pid) || '나간 참가자')}${room.captainEliminated.includes(r.pid) ? ' · 탈락' : ' · 생존'}</b><span>${r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : `X/${TW.MAX_TRIES}`}</span></li>` }).join('')}</ol>
-        <div class="sheet-actions">${champion ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">생존자 다음 판</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
+      const roundWinner = champion || room.scoreResults.find((result) => room.captainAlive.includes(result.pid))?.pid
+      const ended = room.captainAlive.length <= 1
+      const title = champion ? `${crownedName(playerName(champion))}님이 최후의 생존자!` : !room.captainAlive.length ? '전원 탈락!' : hostEliminated ? '탈락했지만 방장으로 남아있어요' : `${room.round}판 종료 · ${room.captainAlive.length}명 생존`
+      return `${celebration(Boolean(roundWinner))}<h2>${title}</h2>${hostEliminated && !ended ? '<p class="muted">방을 나가지 않았어요. 다음 판을 시작하고 끝까지 관전할 수 있습니다.</p>' : ''}<div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${room.captainEliminated.length ? `이번 판 탈락: ${room.captainEliminated.map((pid) => esc(playerName(pid))).join(', ')}` : '탈락자 없음'}</span></div>
+        <ol class="score-list">${room.scoreResults.map((r, i) => { const first = r.pid === roundWinner; const eliminated = room.captainEliminated.includes(r.pid); const outcome = r.disconnected ? '연결 종료 · 자동 탈락' : r.status === 'won' ? `${(r.ms / 1000).toFixed(1)}초 · ${r.tries}/${TW.MAX_TRIES}` : '오답 · 탈락'; return `<li class="${eliminated ? 'eliminated ' : ''}${first ? 'winner' : ''}"><strong>${first ? 1 : i + 1}</strong><b>${first ? crownedName(names.get(r.pid) || '나간 참가자') : esc(names.get(r.pid) || '나간 참가자')}${eliminated ? ' · 탈락' : ' · 생존'}</b><span>${outcome}</span></li>` }).join('')}</ol>
+        <div class="sheet-actions">${ended ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">생존자 다음 판</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
+    }
+    if (room.kind === 'tournament') {
+      const names = displayNames(); const champion = room.tournamentChampion
+      const resultMap = new Map(room.scoreResults.map((result) => [result.pid, result]))
+      const rows = room.tournamentPairs.flatMap((pair) => pair.map((pid) => {
+        const result = resultMap.get(pid); const advance = room.tournamentAlive.includes(pid); const opponent = pair.find((id) => id !== pid)
+        const outcome = result?.disconnected ? '연결 종료 · 자동 탈락' : result?.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초 · 정답` : '오답'
+        return `<li class="${advance ? 'winner' : 'eliminated'}"><strong>${advance ? '진출' : '탈락'}</strong><b>${advance ? crownedName(names.get(pid) || '나간 참가자') : esc(names.get(pid) || '나간 참가자')}<small>상대 · ${esc(names.get(opponent) || '나간 참가자')}</small></b><span>${outcome}</span></li>`
+      })).join('')
+      const byes = room.tournamentByes.map((pid) => `<li class="winner"><strong>진출</strong><b>${crownedName(names.get(pid) || '나간 참가자')}<small>이번 라운드 부전승</small></b><span>자동 진출</span></li>`).join('')
+      const title = champion ? `${crownedName(playerName(champion))}님 토너먼트 우승!` : `${room.round}라운드 종료 · ${room.tournamentAlive.length}명 진출`
+      return `${celebration(Boolean(champion))}<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>1대1 대진 결과</span></div><ol class="score-list tournament-score">${rows}${byes}</ol>
+        <div class="sheet-actions">${champion ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">다음 대진 시작</button>' : '<p class="muted">방장이 다음 대진을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     const names = displayNames(); const relay = room.kind === 'relay'
     const topResult = room.scoreResults[0]
@@ -1285,7 +1386,7 @@
   }
   function showStandings() { if (room) { room.resultSheet = 'standings'; TW.openSheet('standings') } }
   function nextRound() {
-    if (!room?.host || room.kind !== 'relay' && room.kind !== 'captain' || room.kind === 'relay' && room.round >= room.roundsTotal || room.kind === 'captain' && room.captainChampion) return
+    if (!room?.host || !['relay', 'captain', 'tournament'].includes(room.kind) || room.kind === 'relay' && room.round >= room.roundsTotal || room.kind === 'captain' && room.captainAlive.length <= 1 || room.kind === 'tournament' && room.tournamentChampion) return
     clearTimeout(nextTimer); room.round++; room.startedAt = null; room.over = false; TW.closeSheet(); startRound()
   }
   function rematchControls() {
@@ -1339,6 +1440,7 @@
     room.results = new Map(); room.scoreResults = []; room.coopResult = null; room.finalChance = null; room.readyPids = new Set(); room.readyVoters = new Set()
     room.teamBoards = { red: [], blue: [] }; room.teamTurns = { red: null, blue: null }; room.teamStatus = { red: 'waiting', blue: 'waiting' }; room.teamFinishMs = { red: null, blue: null }; room.teamFinals = { red: null, blue: null }; room.teamDeadline = null; room.teamResult = null; room.teamWinner = null; room.teamPending = false; room.spies = { red: null, blue: null }; room.isSpy = false
     room.teamAnswers = null; room.teamPicks = null; room.captainAlive = []; room.captainEliminated = []; room.captainChampion = null
+    room.tournamentAlive = []; room.tournamentPairs = []; room.tournamentByes = []; room.tournamentEliminated = []; room.tournamentChampion = null
     room.participants = []; room.activePids = new Set(); room.turnPid = null; room.pick = null; room.me.role = 'player'
     document.body.classList.remove('watching'); showLobby(); persistRoom(); broadcastLobby()
   }
@@ -1392,7 +1494,8 @@
       peers.hidden = false
       return
     }
-    const list = orderedPlayers().filter((p) => (room.activePids.has(p.pid) || p.status === 'playing') && (room.me.role === 'setter' || p.pid !== room.me.pid))
+    const myPair = room.kind === 'tournament' ? room.tournamentPairs.find((pair) => pair.includes(room.me.pid)) : null
+    const list = orderedPlayers().filter((p) => (room.activePids.has(p.pid) || p.status === 'playing') && (room.me.role === 'setter' || p.pid !== room.me.pid) && (room.kind !== 'tournament' || room.me.role !== 'player' || myPair?.includes(p.pid)))
     const names = displayNames(); const revealWords = ['setter', 'finished', 'spectator'].includes(room.me.role)
     peers.innerHTML = list.map((p) => {
       const entries = Array.from({ length: TW.MAX_TRIES }, (_, row) => ({ marks: p.rows?.[row] || [], guess: p.guesses?.[row] || null }))
@@ -1459,6 +1562,7 @@
       guesses: room.kind === 'coop' ? (TW.state?.guesses || []).map((g) => H.encode(g)) : [],
       scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult, teamResult: room.teamResult, teamWinner: room.teamWinner,
       captain: room.kind === 'captain', captainAlive: room.captainAlive, captainEliminated: room.captainEliminated, captainChampion: room.captainChampion, eliminateCount: room.eliminateCount,
+      tournament: room.kind === 'tournament', tournamentAlive: room.tournamentAlive, tournamentPairs: room.tournamentPairs, tournamentByes: room.tournamentByes, tournamentEliminated: room.tournamentEliminated, tournamentChampion: room.tournamentChampion,
       readyState: room.over ? { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters: Array.from(room.readyVoters.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))) } : null,
       finalChanceState: room.finalChance?.active ? { seconds: Math.max(1, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)), elapsedMs: Math.max(0, Date.now() - room.finalChance.startedAt), results: Array.from(room.finalChance.results.values()) } : null,
     })
@@ -1467,10 +1571,13 @@
     if (!room || payload.pid !== room.me.pid) return
     if (room.startedAt) {
       if (room.over) { if (payload.readyState) applyReadyState(payload.readyState); return }
-      if (Number(payload.round) !== room.round || room.kind !== 'coop' && !isTeamMode() && room.kind !== 'captain') return
+      if (Number(payload.round) !== room.round || room.kind !== 'coop' && !isTeamMode() && !['captain', 'tournament'].includes(room.kind)) return
       TW.applyRemote(() => {
         room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
         if (isTeamMode()) return applyTeamSync(payload.teamState)
+        if (room.kind === 'tournament') {
+          room.tournamentAlive = (payload.tournamentAlive || []).map(String); room.tournamentPairs = payload.tournamentPairs || []; room.tournamentByes = (payload.tournamentByes || []).map(String)
+        }
         room.turnPid = String(payload.turnPid || ''); room.coopPending = false
         TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
         if (payload.finalChanceState) beginFinalChance({ phase: 'final-start', round: room.round, ...payload.finalChanceState })

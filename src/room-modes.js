@@ -549,7 +549,9 @@
     else if (room.me.role === 'setter') text = `내가 낸 정답: ${room.answer}`
     else if (room.kind === 'captain' && room.me.role === 'spectator' && !room.captainAlive.includes(room.me.pid)) text = room.host ? '탈락했지만 방장으로 남아 관전 중 · 다음 판 진행 권한을 유지해요' : '탈락 후 방에 남아 관전 중이에요'
     else if (room.me.role === 'spectator') text = '이번 라운드는 관전 중이에요'
-    banner.textContent = text; banner.hidden = !text
+    const myTeam = isTeamMode() ? room.teams.get(room.me.pid) : null
+    const myTeamNames = myTeam ? teamMembers(myTeam).map((pid) => `${playerName(pid)}${pid === room.me.pid ? ' (나)' : ''}`).join(', ') : ''
+    banner.innerHTML = `${esc(text)}${myTeamNames ? `<small>우리 팀 · ${esc(myTeamNames)}</small>` : ''}`; banner.hidden = !text && !myTeamNames
   }
   function canPlay() {
     if (!room || room.me.role !== 'player' || room.over || room.finalChance?.active) return false
@@ -580,7 +582,7 @@
     const scopes = inGame && isTeamMode() && room.teams.has(room.me.pid)
       ? `<div class="chat-tabs"><button data-chat-scope="all" aria-pressed="${room.chatScope === 'all'}">전체</button><button data-chat-scope="team" aria-pressed="${room.chatScope === 'team'}">우리 팀</button></div>` : ''
     const messages = room.messages.filter((message) => message.scope === 'all' || inGame && message.team === room.teams.get(room.me.pid)).slice(-30)
-    const panel = room.chatOpen ? `<div class="chat-panel">${scopes}<div class="chat-messages">${messages.length ? messages.map((message) => `<p class="${message.pid === room.me.pid ? 'mine' : ''}"><b>${esc(playerName(message.pid))}</b><span>${esc(message.text)}</span></p>`).join('') : '<p class="chat-empty">아직 메시지가 없어요</p>'}</div><div class="chat-form"><input class="field" id="roomChatInput" maxlength="60" placeholder="메시지 입력" autocomplete="off"><button class="btn primary" data-act="room-chat-send">보내기</button></div></div>` : ''
+    const panel = room.chatOpen ? `<div class="chat-panel">${scopes}<div class="chat-messages">${messages.length ? messages.map((message) => `<p class="${message.pid === room.me.pid ? 'mine' : ''}"><b>${esc(playerName(message.pid))}</b><span>${esc(message.text)}</span></p>`).join('') : '<p class="chat-empty">아직 메시지가 없어요</p>'}</div><form class="chat-form" data-room-chat-form><input class="field" id="roomChatInput" maxlength="60" placeholder="메시지 입력" autocomplete="off"><button class="btn primary" id="roomChatSend" type="submit">보내기</button></form></div>` : ''
     const quickMessages = inLobby ? '' : QUICK_MESSAGES.map((text) => `<button class="chip" data-chat="${esc(text)}">${esc(text)}</button>`).join('')
     bar.innerHTML = `<div class="quick-actions">${quickMessages}<button class="chip chat-toggle" data-act="room-chat-toggle" aria-pressed="${room.chatOpen}">채팅${room.messages.length ? ` ${room.messages.length}` : ''}</button>${force}</div>${panel}`
     bar.hidden = false
@@ -1560,13 +1562,18 @@
     if (event.target.id === 'roomWord') paintSetterWord()
     if (event.target.id === 'finalWord') paintFinalWord()
   })
+  document.addEventListener('submit', (event) => {
+    const form = event.target.closest('[data-room-chat-form]')
+    if (!form) return
+    event.preventDefault()
+    sendChat(form.querySelector('#roomChatInput')?.value, room?.chatScope)
+  })
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
     if (event.target.id === 'roomJoinCode') TW.ACTIONS['room-join']()
     else if (event.target.id === 'roomNick' && ($('#roomJoinCode')?.value || globalThis.TWRoomHash)) TW.ACTIONS['room-join']()
     else if (event.target.id === 'roomWord' && !$('#roomWordButton')?.disabled) submitSetterWord()
     else if (event.target.id === 'finalWord' && !$('#finalSubmit')?.disabled) submitFinalWord()
-    else if (event.target.id === 'roomChatInput') { event.preventDefault(); sendChat(event.target.value, room?.chatScope) }
   })
   Net.on('roster', onRoster); Net.on('status', onStatus); Net.on('lobby', onLobby); Net.on('pick', onPick); Net.on('word', onWord)
   Net.on('start', (payload) => beginRound(payload, false)); Net.on('mark', onMark); Net.on('done', onDone); Net.on('turn', onTurn)

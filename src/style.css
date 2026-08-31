@@ -123,6 +123,7 @@ h1, h2, h3, p { margin: 0; }
   flex: none; padding: 9px 12px; text-align: center; border-bottom: 1px solid rgba(255,255,255,.06);
   background: rgba(91,138,184,.13); color: #dce8f4; font-size: 13px; font-weight: 700;
 }
+.room-banner small { display: block; margin-top: 4px; color: #a9c8e5; font-size: 11px; font-weight: 600; }
 .quick-chat {
   position: relative; z-index: 12; flex: none; padding: 8px 10px;
   border-bottom: 1px solid rgba(255,255,255,.06);

@@ -614,14 +614,34 @@ try {
     if (!spyPage || !await spyPage.evaluate(`document.querySelector('#sheetCard h2').textContent.includes('당신은 스파이')`)) throw new Error(`${team} 팀 스파이 비밀 안내 실패`)
   }
   await Promise.all(four.map((player) => player.evaluate(`document.querySelector('[data-close]').click()`)))
+  const duplicateChecks = { red: false, blue: false }
   for (let row = 0; row < 5; row++) {
     for (const team of ['red', 'blue']) {
       const turnPid = await a.evaluate(`Room.current.teamTurns.${team}`)
       if (row === 4 && turnPid === spies[team]) throw new Error(`${team} 팀의 마지막 정규 차례가 스파이에게 배정됐습니다`)
-      await spyPages.get(turnPid).evaluate(`(async () => { const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer); for (const jamo of Hangul.decompose(word)) TW.press(jamo); await TW.submit() })()`)
+      const turnPage = spyPages.get(turnPid)
+      if (turnPid === spies[team] && row > 0 && !duplicateChecks[team]) {
+        const duplicate = await turnPage.evaluate(`(async () => {
+          const before = Room.current.teamBoards.${team}.length
+          for (const jamo of Room.current.teamBoards.${team}[0].guess) TW.press(jamo)
+          await TW.submit(); await new Promise((resolve) => setTimeout(resolve, 120))
+          const state = { before, after: Room.current.teamBoards.${team}.length, notice: document.getElementById('toast').textContent }
+          for (let i = 0; i < TW.state.size; i++) TW.press('←')
+          return state
+        })()`)
+        if (duplicate.after !== duplicate.before || !duplicate.notice.includes('이미 입력한 단어')) throw new Error(`${team} 팀 스파이 중복 단어 차단 실패: ` + JSON.stringify(duplicate))
+        duplicateChecks[team] = true
+      }
+      await turnPage.evaluate(`(async () => {
+        const used = new Set(Room.current.teamBoards.${team}.map((entry) => Hangul.encode(entry.guess)))
+        const word = Words.answers[TW.state.size].find((candidate) => candidate !== TW.state.answer && !used.has(Hangul.encode(Hangul.decompose(candidate))))
+        for (const jamo of Hangul.decompose(word)) TW.press(jamo)
+        await TW.submit()
+      })()`)
       await Promise.all(four.map((player) => waitFor(player, `Room.current.teamBoards.${team}.length === ${row + 1}${row === 4 ? '' : ' && !TW.busy'}`, 12000)))
     }
   }
+  if (!duplicateChecks.red || !duplicateChecks.blue) throw new Error('양 팀 스파이의 중복 단어 차단을 모두 확인하지 못했습니다: ' + JSON.stringify(duplicateChecks))
   await Promise.all(four.map((player) => waitFor(player, `Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)]?.active`, 12000)))
   const spyFinalViews = await Promise.all(four.map((player) => player.evaluate(`({ spy: Room.current.isSpy, hidden: document.getElementById('finalChance').hidden, unlimited: Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)].unlimited, endsAt: Room.current.teamFinals[Room.current.teams.get(Room.current.me.pid)].endsAt })`)))
   if (spyFinalViews.some((view) => !view.unlimited || view.endsAt !== null || view.spy && !view.hidden || !view.spy && view.hidden)) throw new Error('스파이 제외/무제한 마지막 기회 표시 실패: ' + JSON.stringify(spyFinalViews))
@@ -637,7 +657,7 @@ try {
   const redSpyTitle = await spyPages.get(spies.red).evaluate(`document.querySelector('#sheetCard h2').textContent`)
   const spyRate = await a.evaluate(`({ winner: Room.current.teamWinner, red: Room.current.teamResult.find((r) => r.team === 'red'), blue: Room.current.teamResult.find((r) => r.team === 'blue') })`)
   if (spyRate.winner !== 'red' || spyRate.red.total !== 1 || spyRate.blue.total !== 1 || !blueSpyTitle.includes('스파이 개인 승리') || !redSpyTitle.includes('스파이 작전 실패')) throw new Error('스파이 개인 승패/일반 팀원 정답률 처리 실패: ' + JSON.stringify({ blueSpyTitle, redSpyTitle, spyRate }))
-  ok('스파이전 → 마지막 정규 차례 스파이 제외 · 스파이는 마지막 기회 제외 · 일반 팀원 정답률 · 무제한 진행')
+  ok('스파이전 → 팀 내 중복 단어 차단 · 마지막 정규 차례/마지막 기회 스파이 제외 · 일반 팀원 정답률 · 무제한 진행')
 } finally {
   for (const player of players) await cdp.send('Target.disposeBrowserContext', { browserContextId: player.browserContextId }).catch(() => {})
   cdp.ws.close()

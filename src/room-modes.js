@@ -774,9 +774,17 @@
     const index = list.indexOf(pid)
     return list[(index + 1 + list.length) % list.length]
   }
+  function repeatedTeamGuess(team, guess) {
+    const encoded = H.encode(guess)
+    return room.teamBoards[team].some((entry) => H.encode(entry.guess) === encoded)
+  }
   function submitTeam(guess) {
     if (!canPlay()) { blockedInput(); return true }
     const team = room.teams.get(room.me.pid)
+    if (room.kind === 'spy' && room.isSpy && repeatedTeamGuess(team, guess)) {
+      TW.toast('스파이는 팀에서 이미 입력한 단어를 다시 낼 수 없어요', 2400)
+      return true
+    }
     room.teamPending = true; renderBanner()
     const payload = { phase: 'team-submit', round: room.round, team, pid: room.me.pid, row: room.teamBoards[team].length, guess: H.encode(guess) }
     if (room.host) processTeamSubmit(payload)
@@ -795,6 +803,10 @@
     let guess
     try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
     if (guess.length !== room.size) return
+    if (room.kind === 'spy' && Object.values(room.spies).includes(pid) && repeatedTeamGuess(team, guess)) {
+      const rejected = { phase: 'team-reject', round: room.round, team, pid, reason: 'duplicate' }
+      Net.send('turn', rejected); applyTeamReject(rejected); return
+    }
     const marks = H.score(guess, teamAnswerJamo(team))
     const won = marks.every((mark) => mark === 'correct')
     const needsFinalChance = !won && row + 1 >= room.teamMaxTries[team]
@@ -817,6 +829,7 @@
     if (guess.length !== room.size || !marks) return
     const expected = H.score(guess, teamAnswerJamo(team))
     if (expected.some((mark, i) => mark !== marks[i])) return
+    if (room.kind === 'spy' && Object.values(room.spies).includes(pid) && repeatedTeamGuess(team, guess)) return
     const status = payload.status === 'won' ? 'won' : 'playing'
     room.teamBoards[team].push({ pid, guess, marks }); room.teamTurns[team] = status === 'playing' ? String(payload.nextPid || '') : null
     if (status === 'won') { room.teamStatus[team] = 'won'; room.teamFinishMs[team] = Math.max(0, Number(payload.finishMs) || 0) }
@@ -831,6 +844,11 @@
     }
     if (mine) TW.applyRemote(() => TW.applyRoomTurn(guess, marks, status, after))
     else after()
+  }
+  function applyTeamReject(payload) {
+    if (!room || payload.phase !== 'team-reject' || Number(payload.round) !== room.round || String(payload.pid) !== room.me.pid) return
+    room.teamPending = false; renderBanner()
+    if (payload.reason === 'duplicate') TW.toast('스파이는 팀에서 이미 입력한 단어를 다시 낼 수 없어요', 2400)
   }
   function startTeamFinal(team) {
     if (!room?.host || room.over || room.teamFinals[team]?.active) return
@@ -1073,6 +1091,7 @@
     if (!room || !room.startedAt || room.over) return
     if (isTeamMode()) {
       if (payload.phase === 'team-submit') return TW.applyRemote(() => processTeamSubmit(payload))
+      if (payload.phase === 'team-reject') return applyTeamReject(payload)
       if (payload.phase === 'team-commit') return applyTeamCommit(payload)
       if (payload.phase === 'team-final-start') return TW.applyRemote(() => beginTeamFinal(payload))
       if (payload.phase === 'team-final-submit') return TW.applyRemote(() => processTeamFinalSubmit(payload))

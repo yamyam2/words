@@ -24,7 +24,7 @@
   const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '⬜' }
   const MODE_LABEL = {
     daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제',
-    versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '대장전',
+    versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 추리',
   }
 
   const $ = (sel) => document.querySelector(sel)

@@ -9,8 +9,8 @@
   const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   const TO_WIRE = { absent: '0', present: '1', correct: '2' }
   const FROM_WIRE = ['absent', 'present', 'correct']
-  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', captain: '서바이벌', tournament: '토너먼트', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전' }
-  const MODE_GROUPS = { solo: ['versus', 'setter', 'relay', 'captain', 'tournament'], team: ['coop', 'team', 'teamsetter', 'spy'] }
+  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 추리', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전' }
+  const MODE_GROUPS = { solo: ['versus', 'setter', 'relay', 'captain', 'tournament', 'roundtable'], team: ['coop', 'team', 'teamsetter', 'spy'] }
   const TEAM_NAMES = { red: '빨강팀', blue: '파랑팀' }
   const isTeamMode = (kind = room?.kind) => ['team', 'teamsetter', 'spy'].includes(kind)
   const QUICK_MESSAGES = ['ㅋㅋㅋ', '화이팅!', '오 거의 다 왔다!', '천천히 해도 돼']
@@ -90,8 +90,8 @@
     <p><b>칸 수</b></p><div class="room-options">${[4, 5, 6, 7, 0].map((n) => `<button class="chip" data-rsize="${n}" aria-pressed="${draft.size === n}">${n || '랜덤'}${n ? '칸' : ''}</button>`).join('')}</div>
     <div ${draft.kind === 'relay' ? '' : 'hidden'}><p><b>라운드</b></p><div class="room-options">${[1, 3, 5].map((n) => `<button class="chip" data-rounds="${n}" aria-pressed="${draft.roundsTotal === n}">${n}라운드</button>`).join('')}</div></div>
     <div ${draft.kind === 'captain' ? '' : 'hidden'}><p><b>매 판 탈락 인원</b></p><div class="room-options">${[1, 2].map((n) => `<button class="chip" data-eliminate="${n}" aria-pressed="${draft.eliminateCount === n}">${n}명씩 탈락</button>`).join('')}</div></div>
-    <div ${['coop', 'team', 'teamsetter', 'spy'].includes(draft.kind) ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
-    <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '여러 판 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'captain' ? '오답자는 모두 탈락하고, 전원이 맞히면 느린 참가자가 탈락합니다.' : draft.kind === 'tournament' ? '매 라운드 1대1로 겨뤄 이긴 사람만 다음 대진에 진출합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : draft.kind === 'team' ? '두 팀이 공유 보드로 풀며, 마지막 기회는 팀 정답률로 승부합니다.' : draft.kind === 'teamsetter' ? '각 팀 출제자가 상대 팀이 풀 서로 다른 단어를 냅니다.' : draft.kind === 'spy' ? '각 팀에 숨어든 스파이는 자기 팀이 져야 개인 승리합니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
+    <div ${['coop', 'team', 'teamsetter', 'spy', 'roundtable'].includes(draft.kind) ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
+    <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '여러 판 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'captain' ? '오답자는 모두 탈락하고, 전원이 맞히면 느린 참가자가 탈락합니다.' : draft.kind === 'tournament' ? '매 라운드 1대1로 겨뤄 먼저 맞힌 사람만 다음 대진에 진출합니다.' : draft.kind === 'roundtable' ? '원탁을 돌며 색 힌트를 공개하고, 눈치챈 사람은 언제든 정답에 도전합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : draft.kind === 'team' ? '두 팀이 공유 보드로 풀며, 마지막 기회는 팀 정답률로 승부합니다.' : draft.kind === 'teamsetter' ? '각 팀 출제자가 상대 팀이 풀 서로 다른 단어를 냅니다.' : draft.kind === 'spy' ? '각 팀에 숨어든 스파이는 자기 팀이 져야 개인 승리합니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
     <div class="sheet-actions"><button class="btn primary" data-act="room-create">방 만들기</button></div>`
   TW.SHEETS.roommenu = () => {
     if (!room) return '<h2>방을 찾지 못했어요</h2>'
@@ -108,6 +108,21 @@
     return room.isSpy
       ? `<h2 class="spy-title">당신은 스파이입니다.</h2><p><b>${TEAM_NAMES[team]}</b>에 숨어들었어요. 이상한 추측으로 팀의 정답률을 낮추세요.</p><div class="spy-mission">내가 들어간 팀이 지면<br><b>스파이 개인 승리!</b></div><div class="sheet-actions"><button class="btn accent" data-close>역할 확인 완료</button></div>`
       : `<h2>${TEAM_NAMES[team]}입니다.</h2><p>팀원 중 상대편 스파이 한 명이 숨어 있어요. 서로 상의하며 높은 정답률을 만들어 보세요.</p><div class="sheet-actions"><button class="btn primary" data-close>시작하기</button></div>`
+  }
+  TW.SHEETS.tournamentmatch = () => {
+    const match = tournamentMatchFor(room?.me.pid)
+    if (!room || !match) return '<h2>대진 결과를 기다리는 중…</h2>'
+    const won = match.winner === room.me.pid
+    const ready = room.tournamentReady.has(room.me.pid)
+    return `<h2>${won ? `${crownedName(playerName(room.me.pid))} 승리!` : '이번 대진에서 패배했어요'}</h2>
+      <div class="answer-reveal"><b>${esc(match.word)}</b><span>${esc(playerName(match.winner))}님이 다음 라운드에 진출합니다.</span></div>
+      <div class="sheet-actions">${won ? `<button class="btn primary" data-act="room-tournament-ready" ${ready ? 'disabled' : ''}>${ready ? '준비 완료 · 다른 대진 대기 중' : '다음 라운드 준비 완료'}</button>` : '<p class="muted">남은 대진을 관전할 수 있어요.</p>'}<button class="btn ghost" data-close>관전하기</button></div>`
+  }
+  TW.SHEETS.roundtableresult = () => {
+    if (!room || room.kind !== 'roundtable') return '<h2>결과를 찾지 못했어요</h2>'
+    const winner = room.roundtableWinner
+    const history = room.roundtableRows.map((entry) => `<div class="roundtable-result-row"><b>${esc(playerName(entry.pid))}</b>${roundtableTiles(entry)}</div>`).join('')
+    return `${celebration(Boolean(winner))}<h2>${winner ? `${crownedName(playerName(winner))}님이 정답을 알아냈어요!` : '원탁 추리 종료'}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${winner ? '가장 먼저 정답 도전에 성공했습니다.' : '방장이 게임을 종료했습니다.'}</span></div><div class="roundtable-result-history">${history}</div><div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
   }
   TW.SHEETS.pickword = () => `<h2>문제 내기</h2><p class="muted">${room?.kind === 'teamsetter' ? `<b>${TEAM_NAMES[room.pick?.targetTeam]}</b>이 풀 단어를 내 주세요. ` : ''}한글 단어를 입력하세요. 자음과 모음으로 펼쳤을 때 <b>${room?.pick?.size || room?.size || 5}칸</b>이어야 합니다.</p>
     <div style="margin-top:16px"><input class="field" id="roomWord" autofocus placeholder="예: 시민" maxlength="8" autocomplete="off" spellcheck="false"><div class="hint" id="roomWordHint">단어를 입력해 주세요</div></div>
@@ -137,6 +152,7 @@
     'room-chat-toggle': () => { if (room) { room.chatOpen = !room.chatOpen; renderQuickChat(); if (room.chatOpen) setTimeout(() => $('#roomChatInput')?.focus(), 0) } },
     'room-chat-send': () => sendChat($('#roomChatInput')?.value, room?.chatScope),
     'room-random-teams': randomizeTeams,
+    'room-tournament-ready': requestTournamentReady,
     'room-manual-teams': () => { if (room?.host && isTeamMode() && !room.startedAt) { room.teamsHidden = false; balanceTeams(); ensureTeamSetters(); renderLobby(); broadcastLobby() } },
   })
   function readNick() {
@@ -179,7 +195,7 @@
       const teamRole = isTeamMode() && !room.teamsHidden ? `<em class="team-label ${team}">${TEAM_NAMES[team]}${setterTeam ? ' · 출제자' : ''}</em>` : ''
       return `<li><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b>${teamRole}<span>${role}</span>${pick}${teamPick}${teamSetterPick}</li>`
     }).join('')
-    const wait = room.kind === 'spy' ? ' · 제한시간 없음' : isTeamMode() ? ' · 선두 팀 후 30초' : room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
+    const wait = ['spy', 'roundtable'].includes(room.kind) ? ' · 제한시간 없음' : isTeamMode() ? ' · 선두 팀 후 30초' : room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
     const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : room.kind === 'captain' ? ` · 매 판 최소 ${room.eliminateCount}명 탈락` : room.kind === 'tournament' ? ' · 1대1 진출전' : ''}${wait}`
     const teamControls = room.host && isTeamMode() ? `<div class="sheet-actions team-lobby-actions">${room.teamsHidden ? '<button class="btn" data-act="room-manual-teams">수동 배정으로 바꾸기</button>' : '<button class="btn accent" data-act="room-random-teams">랜덤 팀 · 비공개</button>'}</div>` : ''
     const hiddenNotice = isTeamMode() && room.teamsHidden ? '<br><b>비밀 팀 배정 완료</b> · 게임이 시작되면 공개됩니다.' : ''
@@ -211,6 +227,8 @@
       spies: { red: null, blue: null }, isSpy: false,
       captainAlive: [], captainEliminated: [], captainChampion: null,
       tournamentAlive: [], tournamentPairs: [], tournamentByes: [], tournamentEliminated: [], tournamentChampion: null,
+      tournamentWords: {}, tournamentMatches: new Map(), tournamentReady: new Set(), tournamentNextAt: null,
+      roundtableSeats: [], roundtableRows: [], roundtableLocked: new Set(), roundtableWinner: null, roundtablePending: false, roundtableChallengeOpen: false,
     }
     globalThis.TWRoomHash = null
     persistRoom(); showLobby()
@@ -222,8 +240,8 @@
     timer = nextTimer = skipTimer = waitTimer = finalTimer = null
     teamEndTimer = teamFinalTimers.red = teamFinalTimers.blue = teamSkipTimers.red = teamSkipTimers.blue = null
     Net.leave(); room = null; TW.store.set('tw.room.v1', null)
-    document.body.classList.remove('watching')
-    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#lobbyChat').hidden = true; $('#finalChance').hidden = true
+    document.body.classList.remove('watching', 'roundtable-playing')
+    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roundTable').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#lobbyChat').hidden = true; $('#finalChance').hidden = true
     $('#btnBack').dataset.go = 'home'; $('#btnMenu').dataset.sheet = 'stats'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '기록')
     TW.GOES.home()
   }
@@ -297,6 +315,7 @@
       else if (Net.status === 'live') Net.send('sync?', { pid: room.me.pid })
     }
     if (room.kind === 'coop' && room.startedAt && !room.over) scheduleTurnSkip()
+    if (room.kind === 'roundtable' && room.startedAt && !room.over) scheduleRoundtableSkip()
     if (isTeamMode() && room.startedAt && !room.over) scheduleTeamSkips()
     settleDisconnectedPlayers()
     if (room.host && room.finalChance?.active && !room.over) {
@@ -314,7 +333,7 @@
       }
       if (room.teamDeadline) { clearTimeout(teamEndTimer); teamEndTimer = setTimeout(forceTeamDeadline, Math.max(0, room.teamDeadline.endsAt - Date.now())) }
     }
-    if (room.host && room.over) publishReadyState()
+    if (room.host && room.over) room.kind === 'tournament' && !room.tournamentChampion ? publishTournamentReadyState() : publishReadyState()
   }
   function onStatus(status) {
     renderLobby()
@@ -330,7 +349,7 @@
     if (seeded.length % 2) byes.push(...seeded.splice((room.round - 1) % seeded.length, 1))
     const pairs = []
     for (let i = 0; i < seeded.length; i += 2) pairs.push([seeded[i], seeded[i + 1]])
-    room.tournamentPairs = pairs; room.tournamentByes = byes; room.tournamentEliminated = []
+    room.tournamentPairs = pairs; room.tournamentByes = byes; room.tournamentEliminated = []; room.tournamentWords = {}; room.tournamentMatches = new Map(); room.tournamentReady = new Set(); room.tournamentNextAt = null
   }
   function startRound() {
     if (!room?.host || Net.status !== 'live') return
@@ -348,6 +367,7 @@
       if (room.tournamentAlive.length < 2) return TW.toast('토너먼트는 두 명 이상 필요해요')
       prepareTournamentRound()
     }
+    if (room.kind === 'roundtable' && onlinePlayers().length < 2) return TW.toast('원탁 추리는 두 명 이상 필요해요')
     if (room.kind === 'setter') {
       const setterPid = room.peers.get(room.setterPid)?.online ? room.setterPid : room.hostPid
       room.setterPid = setterPid; room.pick = { round: room.round, setterPid, size }
@@ -390,13 +410,29 @@
       }
       Net.send('start', payload); beginRound(payload, false); return
     }
+    if (room.kind === 'tournament') {
+      const used = new Set()
+      for (const pair of room.tournamentPairs) {
+        let word = TW.freeAnswer(size)
+        for (let tries = 0; tries < 20 && used.has(word); tries++) word = TW.freeAnswer(size)
+        used.add(word)
+        for (const pid of pair) room.tournamentWords[pid] = word
+      }
+      answer = room.tournamentWords[participants[0]] || answer
+    }
+    if (room.kind === 'roundtable') {
+      room.roundtableSeats = participants.slice()
+      for (let i = room.roundtableSeats.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [room.roundtableSeats[i], room.roundtableSeats[j]] = [room.roundtableSeats[j], room.roundtableSeats[i]] }
+    }
     const maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, participants.length) : TW.MAX_TRIES
     const payload = {
       round: room.round, roundsTotal: room.roundsTotal, kind: room.kind, size,
       answer: H.encode(H.decompose(answer)), word: answer, setter: setterPid, participants, maxTries,
-      turnPid: room.kind === 'coop' ? participants[0] : null, waitSeconds: room.waitSeconds, ts: Date.now(),
+      turnPid: room.kind === 'coop' ? participants[0] : room.kind === 'roundtable' ? room.roundtableSeats[0] : null, waitSeconds: room.waitSeconds, ts: Date.now(),
       eliminateCount: room.eliminateCount, captainAlive: room.kind === 'captain' ? participants : null,
       tournamentAlive: room.kind === 'tournament' ? room.tournamentAlive : null, tournamentPairs: room.kind === 'tournament' ? room.tournamentPairs : null, tournamentByes: room.kind === 'tournament' ? room.tournamentByes : null,
+      tournamentWords: room.kind === 'tournament' ? room.tournamentWords : null,
+      roundtableSeats: room.kind === 'roundtable' ? room.roundtableSeats : null,
     }
     Net.send('start', payload); beginRound(payload, false)
   }
@@ -497,7 +533,13 @@
       room.tournamentAlive = Array.from(new Set((Array.isArray(payload.tournamentAlive) ? payload.tournamentAlive : room.participants).map(String)))
       room.tournamentPairs = (Array.isArray(payload.tournamentPairs) ? payload.tournamentPairs : []).flatMap((pair) => Array.isArray(pair) && pair.length === 2 ? [[String(pair[0]), String(pair[1])]] : [])
       room.tournamentByes = Array.from(new Set((Array.isArray(payload.tournamentByes) ? payload.tournamentByes : []).map(String)))
-      room.tournamentEliminated = []; room.tournamentChampion = null
+      room.tournamentWords = Object.fromEntries(Object.entries(payload.tournamentWords || {}).map(([pid, word]) => [String(pid), String(word)]))
+      room.tournamentEliminated = []; room.tournamentChampion = null; room.tournamentMatches = new Map(); room.tournamentReady = new Set(); room.tournamentNextAt = null
+      answer = room.tournamentWords[room.me.pid] || answer; room.answer = answer
+    }
+    if (room.kind === 'roundtable') {
+      room.roundtableSeats = Array.from(new Set((Array.isArray(payload.roundtableSeats) ? payload.roundtableSeats : room.participants).map(String))).filter((pid) => room.activePids.has(pid))
+      room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false; room.roundtableChallengeOpen = false
     }
     if (isTeamMode()) {
       room.teamsHidden = false
@@ -515,7 +557,7 @@
       room.teamWinner = null; room.spies = { red: String(payload.spies?.red || '') || null, blue: String(payload.spies?.blue || '') || null }
       room.isSpy = room.kind === 'spy' && Object.values(room.spies).includes(room.me.pid)
     }
-    room.turnPid = room.kind === 'coop' ? String(payload.turnPid || room.participants[0] || '') : null
+    room.turnPid = ['coop', 'roundtable'].includes(room.kind) ? String(payload.turnPid || room.participants[0] || '') : null
     const myTeam = room.teams.get(room.me.pid)
     if (isTeamMode()) { answer = room.teamAnswers?.[myTeam] || room.teamAnswers?.red || answer; room.answer = answer; room.chatScope = myTeam ? 'team' : 'all' }
     room.maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, Number(payload.maxTries) || room.participants.length) : isTeamMode() ? room.teamMaxTries[myTeam] || TW.MAX_TRIES : TW.MAX_TRIES
@@ -530,10 +572,11 @@
     TW.startGame(room.kind, room.size, answer, false, room.maxTries)
     $('#btnBack').dataset.go = 'leave'; $('#btnMenu').dataset.sheet = 'roommenu'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '방 메뉴')
     const watching = room.me.role !== 'player'
-    document.body.classList.toggle('watching', watching); $('#keyboard').hidden = watching; $('.board-wrap').hidden = watching
-    $('#peers').hidden = room.kind === 'coop'
+    document.body.classList.toggle('watching', watching); document.body.classList.toggle('roundtable-playing', room.kind === 'roundtable')
+    $('#keyboard').hidden = watching || room.kind === 'roundtable'; $('.board-wrap').hidden = watching || room.kind === 'roundtable'
+    $('#peers').hidden = ['coop', 'roundtable'].includes(room.kind); $('#roundTable').hidden = room.kind !== 'roundtable'
     $('#finalChance').hidden = true
-    renderPeers(); renderBanner(); renderQuickChat(); TW.refitBoard(); startTimer(); persistRoom()
+    renderPeers(); renderRoundTable(); renderBanner(); renderQuickChat(); TW.refitBoard(); startTimer(); persistRoom()
     if (room.kind === 'spy') TW.openSheet('spyrole')
   }
   function startTimer() {
@@ -572,6 +615,7 @@
     }
     else if (room.kind === 'coop' && room.coopPending) text = '제출을 확인하는 중…'
     else if (room.kind === 'coop') text = room.turnPid === room.me.pid ? '내 차례예요' : `지금은 ${playerName(room.turnPid)}님 차례`
+    else if (room.kind === 'roundtable') text = room.turnPid === room.me.pid ? '내 차례 · 색 힌트 단어를 공개하세요' : `${playerName(room.turnPid)}님의 색 힌트 차례 · 정답 도전은 언제든 가능`
     else if (room.me.role === 'finished') text = room.waitEndsAt ? '완료! 남은 참가자를 응원해 주세요' : '완료! 다른 참가자의 보드를 보고 있어요'
     else if (room.me.role === 'setter') text = `내가 낸 정답: ${room.answer}`
     else if (room.kind === 'captain' && room.me.role === 'spectator' && !room.captainAlive.includes(room.me.pid)) text = room.host ? '탈락했지만 방장으로 남아 관전 중 · 다음 판 진행 권한을 유지해요' : '탈락 후 방에 남아 관전 중이에요'
@@ -679,17 +723,24 @@
     const p = room.peers.get(room.me.pid)
     const guess = TW.state?.guesses?.[row]
     if (p) { if (!p.rows) p.rows = []; if (!p.guesses) p.guesses = []; p.rows[row] = marks.slice(); if (guess) p.guesses[row] = guess.slice() }
-    Net.send('mark', { pid: room.me.pid, row, marks: encodeMarks(marks), guess: guess ? H.encode(guess) : '' }); renderPeers(); persistRoom()
+    Net.send('mark', { pid: room.me.pid, round: room.round, row, marks: encodeMarks(marks), guess: guess ? H.encode(guess) : '' }); renderPeers(); persistRoom()
   }
   function localDone(status, tries) {
     if (!room || room.me.role !== 'player') return
     if (room.kind === 'coop') { if (room.host) finishCoop(status, tries); return }
-    const result = { pid: room.me.pid, status, tries, ms: Date.now() - room.startedAt }
+    const result = { pid: room.me.pid, round: room.round, status, tries, ms: Date.now() - room.startedAt }
     room.results.set(result.pid, result); Object.assign(room.peers.get(result.pid), result)
-    Net.send('done', result); renderPeers(); persistRoom(); showWaitingView(); maybeStartWait(); maybeFinish()
+    Net.send('done', result); renderPeers(); persistRoom()
+    if (room.kind === 'tournament') {
+      if (room.host) processTournamentDone(result)
+      else setTimeout(() => { if (room?.kind === 'tournament' && !room.over && !tournamentMatchFor(room.me.pid)) { Net.send('done', result); Net.send('sync?', { pid: room.me.pid }) } }, 1200)
+      return
+    }
+    showWaitingView(); maybeStartWait(); maybeFinish()
   }
   function onMark(payload) {
     if (!room || room.kind === 'coop' || isTeamMode() || !room.startedAt || payload.pid === room.me.pid) return
+    if (Number(payload.round) !== room.round) return
     const p = room.peers.get(String(payload.pid)); const marks = decodeMarks(payload.marks); const row = Number(payload.row)
     if (!p || !marks || !(row >= 0 && row < TW.MAX_TRIES)) return
     let guess = null
@@ -699,10 +750,191 @@
   }
   function onDone(payload) {
     if (!room || room.kind === 'coop' || !room.startedAt || payload.pid === room.me.pid) return
+    if (Number(payload.round) !== room.round) return
     const p = room.peers.get(String(payload.pid))
     if (!p || !room.activePids.has(p.pid)) return
-    const result = { pid: p.pid, status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(1, Math.min(TW.MAX_TRIES, Number(payload.tries) || TW.MAX_TRIES)), ms: Math.max(0, Number(payload.ms) || 0) }
-    room.results.set(result.pid, result); Object.assign(p, result); renderPeers(); maybeStartWait(); maybeFinish()
+    const result = { pid: p.pid, round: room.round, status: payload.status === 'won' ? 'won' : 'lost', tries: Math.max(1, Math.min(TW.MAX_TRIES, Number(payload.tries) || TW.MAX_TRIES)), ms: Math.max(0, Number(payload.ms) || 0) }
+    room.results.set(result.pid, result); Object.assign(p, result); renderPeers()
+    if (room.kind === 'tournament') { if (room.host) processTournamentDone(result); return }
+    maybeStartWait(); maybeFinish()
+  }
+  function tournamentPair(pid) { return room?.tournamentPairs.find((pair) => pair.includes(String(pid))) || null }
+  function tournamentPairKey(pair) { return pair?.map(String).join('|') || '' }
+  function tournamentMatchFor(pid) {
+    const pair = tournamentPair(pid)
+    return pair ? room.tournamentMatches.get(tournamentPairKey(pair)) || null : null
+  }
+  function processTournamentDone(result) {
+    if (!room?.host || room.kind !== 'tournament' || room.over) return
+    const pair = tournamentPair(result.pid); const key = tournamentPairKey(pair)
+    if (!pair || room.tournamentMatches.has(key)) return
+    const pairResults = pair.map((pid) => room.results.get(pid)).filter(Boolean)
+    if (result.status !== 'won' && pairResults.length < 2) return
+    const winnerResult = result.status === 'won' ? result : sortedResults(pairResults)[0]
+    const winner = winnerResult.pid; const loser = pair.find((pid) => pid !== winner)
+    const loserResult = room.results.get(loser) || { pid: loser, status: 'lost', tries: TW.MAX_TRIES, ms: winnerResult.ms, defeated: true }
+    room.results.set(loser, loserResult)
+    const match = { pair, winner, loser, word: room.tournamentWords[winner] || room.tournamentWords[loser] || room.answer, results: [winnerResult, loserResult] }
+    const payload = { phase: 'tournament-match', round: room.round, ...match }
+    Net.send('turn', payload); applyTournamentMatch(payload)
+    for (const pid of pair) onSyncRequest({ pid })
+    setTimeout(() => {
+      if (!room?.host || room.kind !== 'tournament' || room.round !== payload.round || room.over || !room.tournamentMatches.has(key)) return
+      Net.send('turn', payload)
+      for (const pid of pair) onSyncRequest({ pid })
+    }, 700)
+    if (room.tournamentMatches.size === room.tournamentPairs.length) finishRound()
+  }
+  function applyTournamentMatch(payload) {
+    if (!room || room.kind !== 'tournament' || Number(payload.round) !== room.round || !Array.isArray(payload.pair) || payload.pair.length !== 2) return
+    const pair = payload.pair.map(String); const key = tournamentPairKey(pair)
+    if (room.tournamentMatches.has(key)) return
+    const winner = String(payload.winner || ''); const loser = String(payload.loser || '')
+    if (!pair.includes(winner) || !pair.includes(loser) || winner === loser) return
+    for (const result of Array.isArray(payload.results) ? payload.results : []) {
+      if (!pair.includes(String(result.pid))) continue
+      room.results.set(String(result.pid), { ...result, pid: String(result.pid) })
+    }
+    const match = { pair, winner, loser, word: String(payload.word || room.tournamentWords[winner] || room.answer) }
+    room.tournamentMatches.set(key, match)
+    const loserPeer = room.peers.get(loser); const winnerPeer = room.peers.get(winner)
+    if (loserPeer) loserPeer.status = 'lost'; if (winnerPeer) winnerPeer.status = 'won'
+    if (pair.includes(room.me.pid)) {
+      room.me.role = room.me.pid === winner ? 'finished' : 'spectator'
+      document.body.classList.add('watching'); $('#keyboard').hidden = true; $('.board-wrap').hidden = true
+      TW.endRoomGame(); room.resultSheet = 'tournamentmatch'; renderPeers(); renderBanner(); renderQuickChat(); TW.openSheet('tournamentmatch')
+    } else renderPeers()
+    persistRoom()
+  }
+  function roundtableWord(value) {
+    const raw = String(value || '').trim(); const decomposed = H.decompose(raw); const guess = decomposed ? Array.from(decomposed) : []
+    const exact = guess.join('') === Array.from(H.decompose(room?.answer || '') || '').join('')
+    return { raw, guess, valid: guess.length === room?.size && (exact || TW.isValid(guess)) }
+  }
+  function roundtableNext(pid, onlineOnly = false) {
+    const seats = room?.roundtableSeats.filter((id) => room.activePids.has(id) && (!onlineOnly || room.peers.get(id)?.online)) || []
+    if (!seats.length) return null
+    const index = seats.indexOf(String(pid))
+    return seats[(index + 1 + seats.length) % seats.length]
+  }
+  function roundtableTiles(entry) {
+    return `<div class="roundtable-tiles" style="--cols:${room.size}">${entry.guess.map((jamo, index) => `<i class="${entry.marks[index] || 'absent'}">${esc(jamo)}</i>`).join('')}</div>`
+  }
+  function renderRoundTable() {
+    const root = $('#roundTable')
+    if (!root || !room || room.kind !== 'roundtable' || !room.startedAt) { if (root) root.hidden = true; return }
+    const total = Math.max(1, room.roundtableSeats.length)
+    const seats = room.roundtableSeats.map((pid, index) => {
+      const angle = -Math.PI / 2 + index * Math.PI * 2 / total
+      const x = 50 + Math.cos(angle) * 43; const y = 50 + Math.sin(angle) * 41
+      const current = pid === room.turnPid; const offline = !room.peers.get(pid)?.online; const locked = room.roundtableLocked.has(pid)
+      return `<div class="roundtable-seat ${current ? 'current' : ''} ${offline ? 'offline' : ''} ${locked ? 'locked' : ''}" style="--seat-x:${x.toFixed(2)}%;--seat-y:${y.toFixed(2)}%"><b>${esc(playerName(pid))}${pid === room.me.pid ? ' (나)' : ''}</b><span>${current ? '차례' : locked ? '도전 잠김' : '대기'}</span></div>`
+    }).join('')
+    const rows = room.roundtableRows.length ? room.roundtableRows.slice(-8).map((entry) => `<div class="roundtable-history-row"><span>${esc(playerName(entry.pid))}</span>${roundtableTiles(entry)}</div>`).join('') : '<p class="roundtable-empty">첫 번째 색 힌트를 기다리는 중…</p>'
+    const myTurn = room.turnPid === room.me.pid && room.me.role === 'player'; const locked = room.roundtableLocked.has(room.me.pid)
+    const clue = myTurn ? `<form class="roundtable-form" data-roundtable-clue-form><input class="field" id="roundtableClue" maxlength="8" placeholder="색 힌트로 공개할 단어" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn primary" type="submit" ${room.roundtablePending ? 'disabled' : ''}>공개하기</button></form>` : `<p class="roundtable-wait">${esc(playerName(room.turnPid))}님이 색 힌트를 고르는 중이에요.</p>`
+    const challenge = locked ? '<p class="roundtable-penalty">정답 도전 실패 · 다음 내 차례에 일반 단어를 내면 다시 도전할 수 있어요.</p>' : room.roundtableChallengeOpen ? `<form class="roundtable-form challenge" data-roundtable-answer-form><input class="field" id="roundtableAnswer" maxlength="8" placeholder="비공개 정답 입력" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn accent" type="submit" ${room.roundtablePending ? 'disabled' : ''}>정답 제출</button><button class="btn ghost" type="button" data-roundtable-challenge-close>취소</button></form><p class="roundtable-rule">실패해도 입력한 단어는 다른 사람에게 보이지 않아요.</p>` : '<button class="btn accent roundtable-challenge" data-roundtable-challenge-open>정답 도전!</button>'
+    root.innerHTML = `<div class="roundtable-arena">${seats}<section class="roundtable-center"><strong>공개된 색 힌트</strong><div class="roundtable-history">${rows}</div></section></div><div class="roundtable-controls">${clue}${challenge}</div>`
+    root.hidden = false
+    if (myTurn && !room.roundtablePending) setTimeout(() => $('#roundtableClue')?.focus(), 0)
+  }
+  function submitRoundtableClue(value) {
+    if (!room || room.kind !== 'roundtable' || room.over || room.turnPid !== room.me.pid || room.roundtablePending) return
+    const word = roundtableWord(value)
+    if (!word.valid) return TW.toast(`자모 ${room.size}칸의 사전 단어를 입력해 주세요`)
+    room.roundtablePending = true; renderRoundTable()
+    const payload = { phase: 'roundtable-clue-submit', round: room.round, pid: room.me.pid, guess: H.encode(word.guess) }
+    if (room.host) processRoundtableClue(payload); else Net.send('turn', payload)
+  }
+  function processRoundtableClue(payload) {
+    if (!room?.host || room.kind !== 'roundtable' || room.over || payload.phase !== 'roundtable-clue-submit' || Number(payload.round) !== room.round) return
+    const pid = String(payload.pid || '')
+    if (pid !== room.turnPid || !room.activePids.has(pid)) return rejectRoundtable(pid, '지금은 내 차례가 아니에요')
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return rejectRoundtable(pid, '단어를 다시 입력해 주세요') }
+    const exact = guess.join('') === Array.from(H.decompose(room.answer) || '').join('')
+    if (guess.length !== room.size || !exact && !TW.isValid(guess)) return rejectRoundtable(pid, '사전에 있는 단어를 입력해 주세요')
+    const marks = H.score(guess, Array.from(H.decompose(room.answer)))
+    const commit = { phase: 'roundtable-clue-commit', round: room.round, pid, guess: H.encode(guess), marks: encodeMarks(marks), nextPid: exact ? null : roundtableNext(pid), won: exact }
+    Net.send('turn', commit); applyRoundtableClue(commit)
+    if (exact) finishRoundtable(pid)
+  }
+  function rejectRoundtable(pid, message) {
+    const payload = { phase: 'roundtable-reject', round: room.round, pid, message }
+    Net.send('turn', payload); applyRoundtableReject(payload)
+  }
+  function applyRoundtableReject(payload) {
+    if (!room || String(payload.pid) !== room.me.pid || Number(payload.round) !== room.round) return
+    room.roundtablePending = false; renderRoundTable(); TW.toast(String(payload.message || '다시 시도해 주세요'))
+  }
+  function applyRoundtableClue(payload) {
+    if (!room || room.kind !== 'roundtable' || Number(payload.round) !== room.round || payload.phase !== 'roundtable-clue-commit') return
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return }
+    const marks = decodeMarks(payload.marks); const pid = String(payload.pid || '')
+    if (!room.activePids.has(pid) || guess.length !== room.size || !marks) return
+    const expected = H.score(guess, Array.from(H.decompose(room.answer)))
+    if (expected.some((mark, index) => mark !== marks[index])) return
+    room.roundtableRows.push({ pid, guess, marks }); room.roundtableLocked.delete(pid)
+    room.roundtablePending = false; room.roundtableChallengeOpen = false
+    if (!payload.won) room.turnPid = String(payload.nextPid || roundtableNext(pid) || '')
+    renderRoundTable(); renderBanner(); scheduleRoundtableSkip(); persistRoom()
+  }
+  function submitRoundtableChallenge(value) {
+    if (!room || room.kind !== 'roundtable' || room.over || room.roundtablePending || room.roundtableLocked.has(room.me.pid) || !room.activePids.has(room.me.pid)) return
+    const word = roundtableWord(value)
+    if (!word.valid) return TW.toast(`자모 ${room.size}칸의 사전 단어를 입력해 주세요`)
+    room.roundtablePending = true; renderRoundTable()
+    const payload = { phase: 'roundtable-answer-submit', round: room.round, pid: room.me.pid, guess: H.encode(word.guess) }
+    if (room.host) processRoundtableChallenge(payload); else Net.send('turn', payload)
+  }
+  function processRoundtableChallenge(payload) {
+    if (!room?.host || room.kind !== 'roundtable' || room.over || payload.phase !== 'roundtable-answer-submit' || Number(payload.round) !== room.round) return
+    const pid = String(payload.pid || '')
+    if (!room.activePids.has(pid) || room.roundtableLocked.has(pid)) return rejectRoundtable(pid, '아직 정답에 다시 도전할 수 없어요')
+    let guess
+    try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return rejectRoundtable(pid, '단어를 다시 입력해 주세요') }
+    if (guess.length !== room.size) return rejectRoundtable(pid, `자모 ${room.size}칸을 입력해 주세요`)
+    if (guess.join('') === Array.from(H.decompose(room.answer) || '').join('')) return finishRoundtable(pid)
+    const failed = { phase: 'roundtable-answer-failed', round: room.round, pid }
+    Net.send('turn', failed); applyRoundtableChallengeFailed(failed)
+  }
+  function applyRoundtableChallengeFailed(payload) {
+    if (!room || room.kind !== 'roundtable' || Number(payload.round) !== room.round) return
+    const pid = String(payload.pid || '')
+    if (!room.activePids.has(pid)) return
+    room.roundtableLocked.add(pid)
+    if (pid === room.me.pid) { room.roundtablePending = false; room.roundtableChallengeOpen = false }
+    renderRoundTable(); TW.toast(`${playerName(pid)}님 정답 도전 실패!`, 2200); persistRoom()
+  }
+  function finishRoundtable(winnerPid = null) {
+    if (!room?.host || room.kind !== 'roundtable' || room.over) return
+    room.over = true; room.roundtableWinner = winnerPid ? String(winnerPid) : null; clearTimeout(skipTimer)
+    const payload = { round: room.round, roundtable: true, winnerPid: room.roundtableWinner, word: room.answer, rows: room.roundtableRows.map((entry) => ({ pid: entry.pid, guess: H.encode(entry.guess), marks: encodeMarks(entry.marks) })) }
+    Net.send('over', payload); TW.applyRemote(() => showRoundtableResult(payload))
+  }
+  function showRoundtableResult(payload) {
+    if (!room || room.kind !== 'roundtable') return
+    room.over = true; room.roundtableWinner = payload.winnerPid ? String(payload.winnerPid) : null; room.resultSheet = 'roundtableresult'; room.answer = String(payload.word || room.answer)
+    if (Array.isArray(payload.rows)) room.roundtableRows = payload.rows.flatMap((entry) => {
+      try { const guess = Array.from(H.decode(String(entry.guess || ''))); const marks = decodeMarks(entry.marks); return guess.length === room.size && marks ? [{ pid: String(entry.pid), guess, marks }] : [] } catch (e) { return [] }
+    })
+    room.roundtablePending = false; room.roundtableChallengeOpen = false; clearTimeout(skipTimer); clearInterval(timer)
+    renderRoundTable(); renderBanner(); renderQuickChat(); persistRoom(); TW.endRoomGame(); TW.openSheet('roundtableresult')
+  }
+  function scheduleRoundtableSkip() {
+    clearTimeout(skipTimer)
+    if (!room?.host || room.kind !== 'roundtable' || room.over || room.peers.get(room.turnPid)?.online) return
+    const skippedPid = room.turnPid
+    skipTimer = setTimeout(() => {
+      if (!room?.host || room.over || room.turnPid !== skippedPid || room.peers.get(skippedPid)?.online) return
+      const payload = { phase: 'roundtable-skip', round: room.round, pid: skippedPid, nextPid: roundtableNext(skippedPid, true) }
+      Net.send('turn', payload); applyRoundtableSkip(payload)
+    }, 10000)
+  }
+  function applyRoundtableSkip(payload) {
+    if (!room || room.kind !== 'roundtable' || room.over || Number(payload.round) !== room.round || String(payload.pid) !== room.turnPid) return
+    room.turnPid = String(payload.nextPid || ''); room.roundtablePending = false; renderRoundTable(); renderBanner(); scheduleRoundtableSkip()
   }
   function submitCoop(guess) {
     if (!room || room.kind !== 'coop' && !isTeamMode()) return false
@@ -1089,6 +1321,31 @@
   }
   function onTurn(payload) {
     if (!room || !room.startedAt || room.over) return
+    if (room.kind === 'roundtable') {
+      if (payload.phase === 'roundtable-clue-submit') return TW.applyRemote(() => processRoundtableClue(payload))
+      if (payload.phase === 'roundtable-clue-commit') return applyRoundtableClue(payload)
+      if (payload.phase === 'roundtable-reject') return applyRoundtableReject(payload)
+      if (payload.phase === 'roundtable-answer-submit') return TW.applyRemote(() => processRoundtableChallenge(payload))
+      if (payload.phase === 'roundtable-answer-failed') return applyRoundtableChallengeFailed(payload)
+      if (payload.phase === 'roundtable-skip') return applyRoundtableSkip(payload)
+      return
+    }
+    if (room.kind === 'tournament') {
+      const ms = Math.max(0, Date.now() - room.startedAt)
+      for (const pair of room.tournamentPairs) {
+        if (room.over || room.tournamentMatches.has(tournamentPairKey(pair))) continue
+        const unresolved = pair.filter((pid) => !room.results.has(pid))
+        if (unresolved.some((pid) => room.peers.get(pid)?.online)) continue
+        for (const pid of unresolved) room.results.set(pid, { pid, status: 'lost', tries: TW.MAX_TRIES, ms, disconnected: true })
+        const trigger = pair.map((pid) => room.results.get(pid)).find((result) => result?.status === 'won') || room.results.get(pair[0])
+        if (trigger) processTournamentDone(trigger)
+      }
+      return
+    }
+    if (room.kind === 'tournament') {
+      if (payload.phase === 'tournament-match') applyTournamentMatch(payload)
+      return
+    }
     if (isTeamMode()) {
       if (payload.phase === 'team-submit') return TW.applyRemote(() => processTeamSubmit(payload))
       if (payload.phase === 'team-reject') return applyTeamReject(payload)
@@ -1172,6 +1429,7 @@
   }
   function forceRound() {
     if (!room?.host || room.over) return
+    if (room.kind === 'roundtable') return finishRoundtable(null)
     if (room.kind === 'coop') return room.finalChance?.active ? finishFinalChance() : finishCoop('lost', TW.state?.guesses.length || 0)
     if (isTeamMode()) {
       for (const team of ['red', 'blue']) if (room.teamStatus[team] === 'playing') { room.teamStatus[team] = 'lost'; room.teamTurns[team] = null }
@@ -1179,6 +1437,13 @@
     }
     const ms = Date.now() - room.startedAt
     for (const pid of room.activePids) if (!room.results.has(pid)) room.results.set(pid, { pid, status: 'lost', tries: TW.MAX_TRIES, ms })
+    if (room.kind === 'tournament') {
+      for (const pair of room.tournamentPairs) {
+        if (room.over || room.tournamentMatches.has(tournamentPairKey(pair))) continue
+        processTournamentDone(room.results.get(pair[0]))
+      }
+      return
+    }
     finishRound()
   }
   function finishRound() {
@@ -1198,18 +1463,13 @@
       Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final, payload)); return
     }
     if (room.kind === 'tournament') {
-      const advances = []
-      const eliminated = []
-      const byPid = new Map(scores.map((result) => [result.pid, result]))
-      for (const pair of room.tournamentPairs) {
-        const ranked = sortedResults(pair.map((pid) => byPid.get(pid)).filter(Boolean))
-        if (ranked[0]) advances.push(ranked[0].pid)
-        if (ranked[1]) eliminated.push(ranked[1].pid)
-      }
+      const advances = Array.from(room.tournamentMatches.values(), (match) => match.winner)
+      const eliminated = Array.from(room.tournamentMatches.values(), (match) => match.loser)
       advances.push(...room.tournamentByes)
       room.tournamentAlive = Array.from(new Set(advances)); room.tournamentEliminated = eliminated
       room.tournamentChampion = room.tournamentAlive.length === 1 ? room.tournamentAlive[0] : null
-      const payload = { round: room.round, scores, totals: {}, final: Boolean(room.tournamentChampion), tournament: true, pairs: room.tournamentPairs, byes: room.tournamentByes, eliminated, alive: room.tournamentAlive, champion: room.tournamentChampion }
+      room.tournamentNextAt = room.tournamentChampion ? null : Date.now() + 10000
+      const payload = { round: room.round, scores, totals: {}, final: Boolean(room.tournamentChampion), tournament: true, pairs: room.tournamentPairs, byes: room.tournamentByes, words: room.tournamentWords, matches: Array.from(room.tournamentMatches.values()), ready: Array.from(room.tournamentReady), nextAt: room.tournamentNextAt, eliminated, alive: room.tournamentAlive, champion: room.tournamentChampion }
       Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final, payload)); return
     }
     if (room.kind === 'relay') {
@@ -1239,6 +1499,7 @@
   }
   function onOver(payload) {
     if (!room || Number(payload.round) !== room.round) return
+    if (room.kind === 'roundtable' || payload.roundtable) return TW.applyRemote(() => showRoundtableResult(payload))
     if (isTeamMode() || payload.team) return TW.applyRemote(() => showTeamResult(payload))
     if (room.kind === 'coop' || payload.coop) return TW.applyRemote(() => showCoopResult(payload))
     if (!Array.isArray(payload.scores)) return
@@ -1262,12 +1523,20 @@
       room.tournamentByes = (Array.isArray(meta.byes) ? meta.byes : Array.isArray(meta.tournamentByes) ? meta.tournamentByes : room.tournamentByes).map(String)
       room.tournamentEliminated = (Array.isArray(meta.eliminated) ? meta.eliminated : Array.isArray(meta.tournamentEliminated) ? meta.tournamentEliminated : []).map(String)
       room.tournamentAlive = (Array.isArray(meta.alive) ? meta.alive : Array.isArray(meta.tournamentAlive) ? meta.tournamentAlive : room.tournamentAlive).map(String)
+      room.tournamentWords = Object.fromEntries(Object.entries(meta.words || meta.tournamentWords || room.tournamentWords).map(([pid, word]) => [String(pid), String(word)]))
+      room.tournamentMatches = new Map((Array.isArray(meta.matches) ? meta.matches : Array.isArray(meta.tournamentMatches) ? meta.tournamentMatches : Array.from(room.tournamentMatches.values())).map((match) => [tournamentPairKey(match.pair), { ...match, pair: match.pair.map(String), winner: String(match.winner), loser: String(match.loser) }]))
+      room.tournamentReady = new Set((Array.isArray(meta.ready) ? meta.ready : Array.isArray(meta.tournamentReady) ? meta.tournamentReady : Array.from(room.tournamentReady)).map(String))
+      room.tournamentNextAt = Number(meta.nextAt || meta.tournamentNextAt) || null
       const champion = meta.champion || meta.tournamentChampion
       room.tournamentChampion = champion ? String(champion) : null
     }
     room.waitEndsAt = null; $('#quickChat').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
     if (room.kind === 'relay' && !room.final && room.host) nextTimer = setTimeout(nextRound, 10000)
+    if (room.kind === 'tournament' && !room.tournamentChampion && room.host) {
+      clearTimeout(nextTimer); nextTimer = setTimeout(nextRound, Math.max(0, (room.tournamentNextAt || Date.now() + 10000) - Date.now()))
+      setTimeout(maybeAdvanceTournament, 0)
+    }
   }
   function showCoopResult(payload) {
     if (!room) return
@@ -1370,17 +1639,23 @@
         <div class="sheet-actions">${ended ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">생존자 다음 판</button>' : '<p class="muted">방장이 다음 판을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     if (room.kind === 'tournament') {
-      const names = displayNames(); const champion = room.tournamentChampion
-      const resultMap = new Map(room.scoreResults.map((result) => [result.pid, result]))
-      const rows = room.tournamentPairs.flatMap((pair) => pair.map((pid) => {
-        const result = resultMap.get(pid); const advance = room.tournamentAlive.includes(pid); const opponent = pair.find((id) => id !== pid)
-        const outcome = result?.disconnected ? '연결 종료 · 자동 탈락' : result?.status === 'won' ? `${(result.ms / 1000).toFixed(1)}초 · 정답` : '오답'
-        return `<li class="${advance ? 'winner' : 'eliminated'}"><strong>${advance ? '진출' : '탈락'}</strong><b>${advance ? crownedName(names.get(pid) || '나간 참가자') : esc(names.get(pid) || '나간 참가자')}<small>상대 · ${esc(names.get(opponent) || '나간 참가자')}</small></b><span>${outcome}</span></li>`
-      })).join('')
-      const byes = room.tournamentByes.map((pid) => `<li class="winner"><strong>진출</strong><b>${crownedName(names.get(pid) || '나간 참가자')}<small>이번 라운드 부전승</small></b><span>자동 진출</span></li>`).join('')
+      const champion = room.tournamentChampion
+      const cards = Array.from(room.tournamentMatches.values()).map((match, index) => {
+        const winnerResult = room.scoreResults.find((result) => result.pid === match.winner)
+        const detail = winnerResult?.status === 'won' ? `${(winnerResult.ms / 1000).toFixed(1)}초 만에 정답` : '상대보다 앞서 진출'
+        return `<article class="bracket-match" style="--match-delay:${index * 0.09}s"><div class="bracket-label">${room.round}라운드 · ${index + 1}경기 <span>정답 ${esc(match.word || '')}</span></div>
+          <div class="bracket-player advance"><b>${crownedName(playerName(match.winner))}</b><span>↑ 진출 · ${detail}</span></div>
+          <div class="bracket-player eliminated"><b>${esc(playerName(match.loser))}</b><span>패배 · 관전</span></div></article>`
+      }).join('')
+      const byes = room.tournamentByes.map((pid, index) => `<article class="bracket-match bye" style="--match-delay:${(room.tournamentMatches.size + index) * 0.09}s"><div class="bracket-label">${room.round}라운드 · 부전승</div><div class="bracket-player advance"><b>${crownedName(playerName(pid))}</b><span>↑ 자동 진출</span></div></article>`).join('')
       const title = champion ? `${crownedName(playerName(champion))}님 토너먼트 우승!` : `${room.round}라운드 종료 · ${room.tournamentAlive.length}명 진출`
-      return `${celebration(Boolean(champion))}<h2>${title}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>1대1 대진 결과</span></div><ol class="score-list tournament-score">${rows}${byes}</ol>
-        <div class="sheet-actions">${champion ? rematchControls() : room.host ? '<button class="btn primary" data-act="room-next">다음 대진 시작</button>' : '<p class="muted">방장이 다음 대진을 시작하기를 기다리는 중…</p>'}<button class="btn ghost" data-go="leave">나가기</button></div>`
+      const ready = room.tournamentAlive.filter((pid) => room.tournamentReady.has(pid)).length
+      const total = room.tournamentAlive.length
+      const amAlive = room.tournamentAlive.includes(room.me.pid)
+      const amReady = room.tournamentReady.has(room.me.pid)
+      const controls = champion ? rematchControls() : `${amAlive ? `<button class="btn primary" data-act="room-tournament-ready" ${amReady ? 'disabled' : ''}>${amReady ? '준비 완료' : '다음 라운드 준비 완료'} · ${ready}/${total}</button>` : `<p class="muted">진출자 준비 ${ready}/${total} · 남은 경기를 관전합니다.</p>`}<p class="tournament-countdown">전원 준비 시 바로 시작 · 늦어도 10초 후 자동 시작</p>`
+      return `${celebration(Boolean(champion))}<h2>${title}</h2><p class="muted">승자는 위로 진출하고 패자는 회색으로 표시됩니다.</p><div class="tournament-bracket">${cards}${byes}</div>
+        <div class="sheet-actions">${controls}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     const names = displayNames(); const relay = room.kind === 'relay'
     const topResult = room.scoreResults[0]
@@ -1407,6 +1682,43 @@
   function nextRound() {
     if (!room?.host || !['relay', 'captain', 'tournament'].includes(room.kind) || room.kind === 'relay' && room.round >= room.roundsTotal || room.kind === 'captain' && room.captainAlive.length <= 1 || room.kind === 'tournament' && room.tournamentChampion) return
     clearTimeout(nextTimer); room.round++; room.startedAt = null; room.over = false; TW.closeSheet(); startRound()
+  }
+  function requestTournamentReady() {
+    if (!room || room.kind !== 'tournament' || room.tournamentChampion || room.tournamentReady.has(room.me.pid)) return
+    const match = tournamentMatchFor(room.me.pid)
+    if (room.over ? !room.tournamentAlive.includes(room.me.pid) : !match || match.winner !== room.me.pid) return
+    const payload = { phase: 'tournament-ready', round: room.round, pid: room.me.pid }
+    if (room.host) processTournamentReady(payload)
+    else Net.send('ready', payload)
+  }
+  function processTournamentReady(payload) {
+    if (!room?.host || room.kind !== 'tournament' || room.tournamentChampion || payload.phase !== 'tournament-ready' || Number(payload.round) !== room.round) return
+    const pid = String(payload.pid || '')
+    const match = tournamentMatchFor(pid)
+    if (room.over ? !room.tournamentAlive.includes(pid) : !match || match.winner !== pid) return
+    const peer = room.peers.get(pid)
+    if (peer) peer.online = true
+    room.tournamentReady.add(pid); publishTournamentReadyState()
+  }
+  function publishTournamentReadyState() {
+    if (!room?.host || room.kind !== 'tournament' || room.tournamentChampion) return
+    const eligible = room.over ? room.tournamentAlive : Array.from(room.tournamentMatches.values(), (match) => match.winner)
+    room.tournamentReady = new Set(Array.from(room.tournamentReady).filter((pid) => eligible.includes(pid)))
+    const payload = { phase: 'tournament-ready-state', round: room.round, ready: Array.from(room.tournamentReady) }
+    Net.send('ready', payload); applyTournamentReadyState(payload)
+  }
+  function applyTournamentReadyState(payload) {
+    if (!room || room.kind !== 'tournament' || payload.phase !== 'tournament-ready-state' || Number(payload.round) !== room.round) return
+    room.tournamentReady = new Set((Array.isArray(payload.ready) ? payload.ready : []).map(String))
+    if (room.over) TW.openSheet('scoreboard')
+    else if (tournamentMatchFor(room.me.pid)) TW.openSheet('tournamentmatch')
+    persistRoom(); maybeAdvanceTournament()
+  }
+  function maybeAdvanceTournament() {
+    if (!room?.host || room.kind !== 'tournament' || !room.over || room.tournamentChampion || !room.tournamentAlive.length) return
+    if (room.tournamentAlive.every((pid) => room.tournamentReady.has(pid))) {
+      clearTimeout(nextTimer); nextRound()
+    }
   }
   function rematchControls() {
     const voters = new Set(room?.readyVoters?.size ? room.readyVoters : onlinePlayers().map((p) => p.pid))
@@ -1460,11 +1772,15 @@
     room.teamBoards = { red: [], blue: [] }; room.teamTurns = { red: null, blue: null }; room.teamStatus = { red: 'waiting', blue: 'waiting' }; room.teamFinishMs = { red: null, blue: null }; room.teamFinals = { red: null, blue: null }; room.teamDeadline = null; room.teamResult = null; room.teamWinner = null; room.teamPending = false; room.spies = { red: null, blue: null }; room.isSpy = false
     room.teamAnswers = null; room.teamPicks = null; room.captainAlive = []; room.captainEliminated = []; room.captainChampion = null
     room.tournamentAlive = []; room.tournamentPairs = []; room.tournamentByes = []; room.tournamentEliminated = []; room.tournamentChampion = null
+    room.tournamentWords = {}; room.tournamentMatches = new Map(); room.tournamentReady = new Set(); room.tournamentNextAt = null
+    room.roundtableSeats = []; room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false; room.roundtableChallengeOpen = false
     room.participants = []; room.activePids = new Set(); room.turnPid = null; room.pick = null; room.me.role = 'player'
-    document.body.classList.remove('watching'); showLobby(); persistRoom(); broadcastLobby()
+    document.body.classList.remove('watching', 'roundtable-playing'); $('#roundTable').hidden = true; showLobby(); persistRoom(); broadcastLobby()
   }
   function onReady(payload) {
     if (!room) return
+    if (payload.phase === 'tournament-ready') return processTournamentReady(payload)
+    if (payload.phase === 'tournament-ready-state') return applyTournamentReadyState(payload)
     if (payload.phase === 'request') return processReady(payload)
     if (payload.phase === 'state') return applyReadyState(payload)
     if (payload.phase === 'lobby') return returnToLobby(payload)
@@ -1568,6 +1884,19 @@
     if (state.deadline) beginTeamDeadline({ phase: 'team-deadline', round: room.round, team: state.deadline.team, seconds: state.deadline.seconds })
     renderPeers(); renderBanner(); renderQuickChat(); scheduleTeamSkips(); persistRoom()
   }
+  function wireRoundtableState() {
+    if (!room || room.kind !== 'roundtable') return null
+    return { seats: room.roundtableSeats, turnPid: room.turnPid, locked: Array.from(room.roundtableLocked), winnerPid: room.roundtableWinner, rows: room.roundtableRows.map((entry) => ({ pid: entry.pid, guess: H.encode(entry.guess), marks: encodeMarks(entry.marks) })) }
+  }
+  function applyRoundtableSync(state) {
+    if (!room || room.kind !== 'roundtable' || !state) return
+    room.roundtableSeats = Array.from(new Set((state.seats || []).map(String))).filter((pid) => room.activePids.has(pid))
+    room.turnPid = String(state.turnPid || room.roundtableSeats[0] || ''); room.roundtableLocked = new Set((state.locked || []).map(String)); room.roundtableWinner = state.winnerPid ? String(state.winnerPid) : null
+    room.roundtableRows = (state.rows || []).flatMap((entry) => {
+      try { const guess = Array.from(H.decode(String(entry.guess || ''))); const marks = decodeMarks(entry.marks); return guess.length === room.size && marks ? [{ pid: String(entry.pid), guess, marks }] : [] } catch (e) { return [] }
+    })
+    room.roundtablePending = false; renderRoundTable(); renderBanner(); scheduleRoundtableSkip(); persistRoom()
+  }
   function onSyncRequest(payload) {
     if (!room?.host || payload.pid === room.me.pid) return
     if (!room.startedAt) { broadcastLobby(); return }
@@ -1582,23 +1911,37 @@
       scores: Array.from(room.results.values()), totals: totalsObject(), over: room.over, final: room.final, coopResult: room.coopResult, teamResult: room.teamResult, teamWinner: room.teamWinner,
       captain: room.kind === 'captain', captainAlive: room.captainAlive, captainEliminated: room.captainEliminated, captainChampion: room.captainChampion, eliminateCount: room.eliminateCount,
       tournament: room.kind === 'tournament', tournamentAlive: room.tournamentAlive, tournamentPairs: room.tournamentPairs, tournamentByes: room.tournamentByes, tournamentEliminated: room.tournamentEliminated, tournamentChampion: room.tournamentChampion,
-      readyState: room.over ? { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters: Array.from(room.readyVoters.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))) } : null,
+      tournamentWords: room.tournamentWords, tournamentMatches: Array.from(room.tournamentMatches.values()), tournamentReady: Array.from(room.tournamentReady), tournamentNextAt: room.tournamentNextAt,
+      roundtable: room.kind === 'roundtable', roundtableSeats: room.roundtableSeats, roundtableState: wireRoundtableState(), winnerPid: room.roundtableWinner, rows: room.kind === 'roundtable' ? wireRoundtableState()?.rows : null,
+      readyState: room.over ? room.kind === 'tournament' && !room.tournamentChampion
+        ? { phase: 'tournament-ready-state', round: room.round, ready: Array.from(room.tournamentReady) }
+        : { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters: Array.from(room.readyVoters.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))) } : null,
       finalChanceState: room.finalChance?.active ? { seconds: Math.max(1, Math.ceil((room.finalChance.endsAt - Date.now()) / 1000)), elapsedMs: Math.max(0, Date.now() - room.finalChance.startedAt), results: Array.from(room.finalChance.results.values()) } : null,
     })
   }
   function onSync(payload) {
     if (!room || payload.pid !== room.me.pid) return
     if (room.startedAt) {
-      if (room.over) { if (payload.readyState) applyReadyState(payload.readyState); return }
-      if (Number(payload.round) !== room.round || room.kind !== 'coop' && !isTeamMode() && !['captain', 'tournament'].includes(room.kind)) return
+      if (room.over) { if (payload.readyState) payload.readyState.phase === 'tournament-ready-state' ? applyTournamentReadyState(payload.readyState) : applyReadyState(payload.readyState); return }
+      if (Number(payload.round) !== room.round || room.kind !== 'coop' && !isTeamMode() && !['captain', 'tournament', 'roundtable'].includes(room.kind)) return
       TW.applyRemote(() => {
         room.participants = validParticipants(payload); room.activePids = new Set(room.participants)
         if (isTeamMode()) return applyTeamSync(payload.teamState)
         if (room.kind === 'tournament') {
           room.tournamentAlive = (payload.tournamentAlive || []).map(String); room.tournamentPairs = payload.tournamentPairs || []; room.tournamentByes = (payload.tournamentByes || []).map(String)
+          room.tournamentWords = Object.fromEntries(Object.entries(payload.tournamentWords || {}).map(([pid, word]) => [String(pid), String(word)]))
+          room.tournamentMatches = new Map((payload.tournamentMatches || []).map((match) => [tournamentPairKey(match.pair), { ...match, pair: match.pair.map(String), winner: String(match.winner), loser: String(match.loser) }]))
+          room.tournamentReady = new Set((payload.tournamentReady || []).map(String)); room.tournamentNextAt = Number(payload.tournamentNextAt) || null
         }
+        if (room.kind === 'roundtable') applyRoundtableSync(payload.roundtableState)
         room.turnPid = String(payload.turnPid || ''); room.coopPending = false
-        TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
+        if (room.kind !== 'roundtable') TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
+        const tournamentMatch = room.kind === 'tournament' ? tournamentMatchFor(room.me.pid) : null
+        if (tournamentMatch) {
+          room.me.role = tournamentMatch.winner === room.me.pid ? 'finished' : 'spectator'
+          document.body.classList.add('watching'); $('#keyboard').hidden = true; $('.board-wrap').hidden = true
+          room.resultSheet = 'tournamentmatch'; TW.endRoomGame(); TW.openSheet('tournamentmatch')
+        }
         if (payload.finalChanceState) beginFinalChance({ phase: 'final-start', round: room.round, ...payload.finalChanceState })
         renderBanner(); persistRoom()
       })
@@ -1612,6 +1955,8 @@
       applyTeamSync(payload.teamState)
     } else if (room.kind === 'coop') {
       TW.restoreRoomGame((payload.guesses || []).map((g) => H.decode(String(g))), payload.coopResult?.status || 'playing')
+    } else if (room.kind === 'roundtable') {
+      applyRoundtableSync(payload.roundtableState)
     } else if (canResume) {
       TW.restoreRoomGame((resume.guesses || []).map((g) => H.decode(String(g))), resume.status)
       room.me.role = 'player'; document.body.classList.remove('watching'); $('#keyboard').hidden = false; $('.board-wrap').hidden = false
@@ -1625,13 +1970,15 @@
     room.totals = new Map(Object.entries(payload.totals || {})); renderPeers(); renderBanner()
     if (Number(payload.waitRemaining) > 0) beginWait({ round: room.round, seconds: Number(payload.waitRemaining) })
     if (payload.finalChanceState) beginFinalChance({ phase: 'final-start', round: room.round, ...payload.finalChanceState })
-    if (payload.over) isTeamMode() ? showTeamResult({ round: room.round, team: true, word: room.answer, teamWords: payload.teamState?.teamWords, winner: payload.teamWinner, results: payload.teamResult || [] }) : room.kind === 'coop' ? showCoopResult(payload.coopResult || payload) : showScoreboard(Array.from(room.results.values()), Boolean(payload.final), { ...payload, captain: payload.captain, alive: payload.captainAlive, eliminated: payload.captainEliminated, champion: payload.captainChampion })
-    if (payload.readyState) applyReadyState(payload.readyState)
+    if (payload.over) isTeamMode() ? showTeamResult({ round: room.round, team: true, word: room.answer, teamWords: payload.teamState?.teamWords, winner: payload.teamWinner, results: payload.teamResult || [] }) : room.kind === 'coop' ? showCoopResult(payload.coopResult || payload) : room.kind === 'roundtable' ? showRoundtableResult({ ...payload, rows: payload.rows || payload.roundtableState?.rows }) : showScoreboard(Array.from(room.results.values()), Boolean(payload.final), { ...payload, captain: payload.captain, alive: payload.captainAlive, eliminated: payload.captainEliminated, champion: payload.captainChampion, tournament: payload.tournament, pairs: payload.tournamentPairs, byes: payload.tournamentByes, words: payload.tournamentWords, matches: payload.tournamentMatches, ready: payload.tournamentReady, nextAt: payload.tournamentNextAt })
+    if (payload.readyState) payload.readyState.phase === 'tournament-ready-state' ? applyTournamentReadyState(payload.readyState) : applyReadyState(payload.readyState)
   }
 
   document.addEventListener('click', (event) => {
     const insideChat = event.composedPath().some((node) => node?.classList?.contains('quick-chat'))
     if (room?.chatOpen && !insideChat) { room.chatOpen = false; renderQuickChat() }
+    if (event.target.closest('[data-roundtable-challenge-open]') && room?.kind === 'roundtable') { room.roundtableChallengeOpen = true; renderRoundTable(); setTimeout(() => $('#roundtableAnswer')?.focus(), 0); return }
+    if (event.target.closest('[data-roundtable-challenge-close]') && room?.kind === 'roundtable') { room.roundtableChallengeOpen = false; renderRoundTable(); return }
     const category = event.target.closest('[data-room-category]')
     if (category && ['solo', 'team'].includes(category.dataset.roomCategory)) {
       const nick = $('#roomNick')?.value || ''
@@ -1689,10 +2036,14 @@
     if (event.target.id === 'finalWord') paintFinalWord()
   })
   document.addEventListener('submit', (event) => {
-    const form = event.target.closest('[data-room-chat-form]')
-    if (!form) return
+    const clueForm = event.target.closest('[data-roundtable-clue-form]')
+    if (clueForm) { event.preventDefault(); submitRoundtableClue(clueForm.querySelector('#roundtableClue')?.value); return }
+    const answerForm = event.target.closest('[data-roundtable-answer-form]')
+    if (answerForm) { event.preventDefault(); submitRoundtableChallenge(answerForm.querySelector('#roundtableAnswer')?.value); return }
+    const chatForm = event.target.closest('[data-room-chat-form]')
+    if (!chatForm) return
     event.preventDefault()
-    sendChat(form.querySelector('#roomChatInput')?.value, room?.chatScope)
+    sendChat(chatForm.querySelector('#roomChatInput')?.value, room?.chatScope)
   })
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return

@@ -857,6 +857,7 @@
       action.innerHTML = `<button class="roundtable-submit ${tone}" data-act="room-roundtable-submit" ${disabled ? 'disabled' : ''}><b>${title}</b><span>${note}</span></button>`
       action.hidden = room.me.role !== 'player' || room.over
     }
+    TW.repaint?.()
   }
   function submitRoundtableClue(value) {
     if (!room || room.kind !== 'roundtable' || room.over || room.turnPid !== room.me.pid || room.roundtablePending) return
@@ -2102,5 +2103,11 @@
     else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(resume.code, resume.nick, { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1, waitSeconds: [0, 30, 60, 90].includes(Number(resume.waitSeconds)) ? Number(resume.waitSeconds) : 60, eliminateCount: [1, 2].includes(Number(resume.eliminateCount)) ? Number(resume.eliminateCount) : 1, roundtableFreeWords: Boolean(resume.roundtableFreeWords) }, resume), 0)
   } else { roomButton.remove(); globalThis.TWRoomHash = null }
 
-  globalThis.Room = { get current() { return room }, localMark, localDone, submitCoop, canPlay, blockedInput, allowUnknownGuess: () => Boolean(room?.kind === 'roundtable' && room.roundtableFreeWords), leave: leaveRoom, normalizeCode, repaintPeers: renderPeers }
+  globalThis.Room = {
+    get current() { return room },
+    localMark, localDone, submitCoop, canPlay, blockedInput,
+    allowUnknownGuess: () => Boolean(room?.kind === 'roundtable' && room.roundtableFreeWords),
+    keyboardRows: () => room?.kind === 'roundtable' ? room.roundtableRows : null,
+    leave: leaveRoom, normalizeCode, repaintPeers: renderPeers,
+  }
 })()

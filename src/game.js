@@ -326,10 +326,15 @@
   function paintKeyboard() {
     const rank = { absent: 1, present: 2, correct: 3 }
     const best = {}
-    for (const guess of state.guesses) {
-      const marks = H.score(guess, state.answerJamo)
+    const sharedRows = state.room ? globalThis.Room?.keyboardRows?.() : null
+    const rows = Array.isArray(sharedRows)
+      ? sharedRows
+      : state.guesses.map((guess) => ({ guess, marks: H.score(guess, state.answerJamo) }))
+    for (const row of rows) {
+      const guess = Array.isArray(row?.guess) ? row.guess : []
+      const marks = Array.isArray(row?.marks) ? row.marks : []
       guess.forEach((j, i) => {
-        if (!best[j] || rank[marks[i]] > rank[best[j]]) best[j] = marks[i]
+        if (rank[marks[i]] && (!best[j] || rank[marks[i]] > rank[best[j]])) best[j] = marks[i]
       })
     }
     for (const b of el.keyboard.querySelectorAll('.key')) {

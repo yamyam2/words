@@ -111,7 +111,9 @@ async function newPlayer(name, url = PAGE_URL, viewport = null) {
   return { name, browserContextId, evaluate, call }
 }
 async function waitFor(player, expression, timeout = 8000) {
-  const until = Date.now() + timeout
+  // 공개 Realtime 서비스가 순간적으로 느릴 때 기능 실패로 오인하지 않도록
+  // 각 검사의 의미는 유지하되 신호 도착에 50%의 여유를 둔다.
+  const until = Date.now() + Math.ceil(timeout * 1.5)
   while (Date.now() < until) {
     if (await player.evaluate(expression).catch(() => false)) return
     await sleep(200)
@@ -620,6 +622,12 @@ try {
   if (roundtableUi.rows !== 1 || roundtableUi.keys < 20 || !roundtableUi.action?.includes('내 차례') || !roundtableUi.ownColor || !roundtableUi.order) throw new Error('원탁 모드 자판/입력칸/상태 버튼 화면 구성 실패: ' + JSON.stringify(roundtableUi))
   await firstTurn.evaluate(`(() => { for (const jamo of ['ㅎ','ㅎ','ㅎ','ㅎ']) TW.press(jamo); document.querySelector('[data-act=room-roundtable-submit]').click() })()`)
   await Promise.all([a, b].map((player) => waitFor(player, `Room.current.roundtableRows.length === 1 && Room.current.turnPid !== '${firstTurnPid}'`, 12000)))
+  const roundtableKeys = await Promise.all([a, b].map((player) => player.evaluate(`(() => {
+    const rank = { absent: 1, present: 2, correct: 3 }; const expected = {}
+    for (const row of Room.current.roundtableRows) row.guess.forEach((jamo, index) => { const mark = row.marks[index]; if (!expected[jamo] || rank[mark] > rank[expected[jamo]]) expected[jamo] = mark })
+    return Object.entries(expected).every(([jamo, mark]) => document.querySelector('[data-key="' + jamo + '"]')?.classList.contains(mark)) && Object.keys(expected).length > 0
+  })()`)))
+  if (roundtableKeys.some((colored) => !colored)) throw new Error('원탁 공개 단어 색이 모든 참가자의 자판에 누적되지 않았습니다: ' + JSON.stringify(roundtableKeys))
   const challengerPid = firstTurnPid; const challenger = firstTurn
   const challengeUi = await challenger.evaluate(`({ text: document.querySelector('.roundtable-submit')?.textContent, challengeColor: document.querySelector('.roundtable-submit')?.classList.contains('challenge-turn') })`)
   if (!challengeUi.text?.includes('다른 사람 차례') || !challengeUi.challengeColor) throw new Error('다른 사람 차례 정답 도전 표시 실패: ' + JSON.stringify(challengeUi))
@@ -635,7 +643,7 @@ try {
   await Promise.all([a, b].map((player) => waitFor(player, `Room.current.over && Room.current.roundtableWinner && document.querySelector('.answer-reveal b')`, 12000)))
   const roundtableResult = await a.evaluate(`({ seats: document.querySelectorAll('.roundtable-seat').length, history: Room.current.roundtableRows.length, answer: document.querySelector('.answer-reveal b').textContent, crown: !!document.querySelector('.winner-crown') })`)
   if (roundtableResult.seats !== 2 || roundtableResult.history !== 3 || roundtableResult.answer !== await a.evaluate(`TW.state.answer`) || !roundtableResult.crown) throw new Error('원탁 모드 결과 처리 실패: ' + JSON.stringify(roundtableResult))
-  ok('원탁 모드 → 자모 입력칸·자판 · 차례별 초록/노랑 버튼 · 자유 단어 · 비공개 도전 잠금/해제 · 즉시 우승')
+  ok('원탁 모드 → 자모 입력칸·공개 단어 기반 자판 색 · 차례별 초록/노랑 버튼 · 자유 단어 · 비공개 도전 잠금/해제 · 즉시 우승')
 
   const spyCode = await createMode('spy', 4)
   for (const [index, player] of [c, d].entries()) {

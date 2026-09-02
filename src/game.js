@@ -24,7 +24,7 @@
   const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '⬜' }
   const MODE_LABEL = {
     daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제',
-    versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 추리',
+    versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 모드',
   }
 
   const $ = (sel) => document.querySelector(sel)
@@ -136,7 +136,7 @@
     const answer = word || (mode === 'daily' ? dailyAnswer(kstToday(), size) : freeAnswer(size))
     state = {
       mode, size, answer, locked: Boolean(locked),
-      maxTries: Math.max(MAX_TRIES, Math.floor(Number(maxTries) || MAX_TRIES)),
+      maxTries: mode === 'roundtable' ? 1 : Math.max(MAX_TRIES, Math.floor(Number(maxTries) || MAX_TRIES)),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
       date: kstToday(), room: globalThis.Room?.current?.code || null,
@@ -367,7 +367,8 @@
     if (guess.length < state.size) return reject('자모를 다 채워주세요')
     // 친구가 직접 낸 문제는 내장 사전에 없을 수도 있다. 정답 그 자체만은 제출할 수 있게 한다.
     const isAnswer = guess.join('') === state.answerJamo.join('')
-    if (!isValid(guess) && !isAnswer) return reject('사전에 없는 단어예요')
+    const unknownAllowed = Boolean(state.room && globalThis.Room?.allowUnknownGuess?.())
+    if (!isValid(guess) && !isAnswer && !unknownAllowed) return reject('사전에 없는 단어예요')
     // 협동은 방장이 한 줄을 확정한 뒤 모든 화면에 똑같이 적용한다.
     // 여기서 로컬 보드를 먼저 바꾸면 참가자마다 행/턴이 갈라질 수 있다.
     if (state.room && globalThis.Room?.submitCoop?.(guess.slice())) return
@@ -413,6 +414,7 @@
     }, marks.length * 180 + 420)
   }
   function setJudge(next) { judge = typeof next === 'function' ? next : (guess) => H.score(guess, state.answerJamo) }
+  function clearCurrent() { if (state) { state.current = []; paint() } }
   function applyRemote(fn) { if (busy) pending.push(fn); else fn() }
   function flushRemote() {
     const q = pending
@@ -810,7 +812,7 @@
     get busy() { return busy },
     shareText, shareUrl, freeAnswer, resolveSize,
     SHEETS, GOES, ACTIONS, openSheet, closeSheet, toast, store, isValid, b64url,
-    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn, refitBoard: scheduleFitBoard,
+    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn, clearCurrent, refitBoard: scheduleFitBoard,
     repaint: () => { if (state) paint() },
     restoreRoomGame: (guesses, status = 'playing') => {
       if (!state || !state.room) return

@@ -124,6 +124,14 @@ h1, h2, h3, p { margin: 0; }
 .room-category-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 .room-category-grid .btn[aria-pressed="true"] { background: var(--correct); color: var(--ink-on); }
 .room-mode-step { margin-top: 18px; }
+.lobby-mode-card {
+  display: grid; gap: 4px; margin: 2px 0 18px; padding: 14px 16px;
+  border: 1px solid rgba(156,221,153,.32); border-radius: 14px;
+  background: linear-gradient(135deg, rgba(156,221,153,.12), rgba(91,138,184,.08)); text-align: left;
+}
+.lobby-mode-card span { color: var(--correct); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.lobby-mode-card strong { font-size: 21px; line-height: 1.25; }
+.lobby-mode-card small { color: #b7bec7; font-size: 12px; line-height: 1.45; }
 .spy-title { color: #ffb45b; }
 .spy-mission { margin: 18px 0 4px; padding: 18px; border: 1px solid rgba(255,180,91,.5); border-radius: 12px; background: rgba(255,180,91,.08); text-align: center; line-height: 1.6; }
 .spy-mission b { color: #ffb45b; font-size: 18px; }
@@ -194,10 +202,10 @@ h1, h2, h3, p { margin: 0; }
 .mini-tile.present { background: var(--present); }
 .mini-tile.absent { background: var(--absent); }
 
-.round-table-mode { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 10px calc(18px + env(safe-area-inset-bottom)); }
-.roundtable-arena { position: relative; width: min(100%, 500px); height: clamp(340px, 54vh, 470px); margin: 0 auto; }
+.round-table-mode { flex: none; min-height: 0; overflow: hidden; padding: 5px 8px 0; }
+.roundtable-arena { position: relative; width: min(100%, 480px); height: clamp(205px, 29vh, 272px); margin: 0 auto; }
 .roundtable-arena::before { content: ''; position: absolute; inset: 10% 8%; border: 2px solid rgba(156,221,153,.24); border-radius: 48%; background: radial-gradient(ellipse, rgba(91,138,184,.18), rgba(18,29,42,.8) 72%); box-shadow: inset 0 0 36px rgba(0,0,0,.35), 0 12px 30px rgba(0,0,0,.18); }
-.roundtable-seat { position: absolute; z-index: 2; left: var(--seat-x); top: var(--seat-y); width: 82px; padding: 7px 5px; transform: translate(-50%,-50%); border: 1px solid var(--line); border-radius: 12px; background: #28282b; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.32); transition: transform .22s, border-color .22s, opacity .22s; }
+.roundtable-seat { position: absolute; z-index: 2; left: var(--seat-x); top: var(--seat-y); width: 74px; padding: 5px 4px; transform: translate(-50%,-50%); border: 1px solid var(--line); border-radius: 10px; background: #28282b; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.32); transition: transform .22s, border-color .22s, opacity .22s; }
 .roundtable-seat b, .roundtable-seat span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .roundtable-seat b { font-size: 11px; }
 .roundtable-seat span { margin-top: 2px; color: var(--ink-dim); font-size: 9px; }
@@ -206,37 +214,36 @@ h1, h2, h3, p { margin: 0; }
 .roundtable-seat.locked { border-color: rgba(248,228,131,.4); }
 .roundtable-seat.locked span { color: var(--present); }
 .roundtable-seat.offline { opacity: .38; }
-.roundtable-center { position: absolute; z-index: 1; left: 50%; top: 50%; width: 58%; height: 53%; transform: translate(-50%,-50%); display: flex; flex-direction: column; min-width: 0; padding: 13px 10px; }
+.roundtable-center { position: absolute; z-index: 1; left: 50%; top: 50%; width: 58%; height: 55%; transform: translate(-50%,-50%); display: flex; flex-direction: column; min-width: 0; padding: 10px 8px; }
 .roundtable-center > strong { flex: none; color: #c7dcf0; text-align: center; font-size: 11px; }
-.roundtable-history { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; padding-right: 2px; }
-.roundtable-empty { margin: 32px 8px 0; color: var(--ink-dim); text-align: center; font-size: 11px; line-height: 1.5; }
-.roundtable-history-row, .roundtable-result-row { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 6px; margin-bottom: 6px; }
+.roundtable-history { flex: 1; min-height: 0; overflow-y: auto; margin-top: 5px; padding-right: 2px; }
+.roundtable-empty { margin: 22px 7px 0; color: var(--ink-dim); text-align: center; font-size: 10px; line-height: 1.45; }
+.roundtable-history-row, .roundtable-result-row { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 5px; margin-bottom: 4px; }
 .roundtable-history-row > span, .roundtable-result-row > b { overflow: hidden; color: var(--ink-dim); text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
 .roundtable-tiles { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 3px; }
 .roundtable-tiles i { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--ink-on); font-size: clamp(10px, 3vw, 16px); font-style: normal; font-weight: 800; }
 .roundtable-tiles i.correct { background: var(--correct); }
 .roundtable-tiles i.present { background: var(--present); }
 .roundtable-tiles i.absent { background: var(--absent); }
-.roundtable-controls { width: min(100%, 500px); margin: 0 auto; padding: 4px 4px 0; text-align: center; }
-.roundtable-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
-.roundtable-form.challenge { grid-template-columns: minmax(0,1fr) auto auto; margin-top: 9px; }
-.roundtable-form .field { min-width: 0; padding: 11px 9px; text-align: left; font-size: 15px; }
-.roundtable-form .btn { padding: 10px 12px; font-size: 13px; }
-.roundtable-wait, .roundtable-penalty, .roundtable-rule { margin: 4px 0 9px; color: var(--ink-dim); font-size: 11px; line-height: 1.45; }
-.roundtable-penalty { color: var(--present); }
-.roundtable-challenge { width: 100%; margin-top: 8px; }
+.roundtable-action { flex: none; padding: 0 10px 7px; }
+.roundtable-submit { width: 100%; min-height: 57px; padding: 9px 12px; border-radius: 12px; color: var(--ink-on); text-align: center; }
+.roundtable-submit b, .roundtable-submit span { display: block; }
+.roundtable-submit b { font-size: 14px; }
+.roundtable-submit span { margin-top: 3px; font-size: 10px; font-weight: 650; opacity: .72; }
+.roundtable-submit.my-turn { background: var(--correct); }
+.roundtable-submit.challenge-turn { background: var(--accent); }
+.roundtable-submit.locked { background: #3a3a3c; color: var(--ink-dim); cursor: default; }
+.roundtable-submit:disabled { opacity: .76; cursor: default; }
 .roundtable-result-history { max-height: 210px; overflow-y: auto; margin: 10px 0 14px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
 .roundtable-result-row { grid-template-columns: 76px 1fr; }
 .roundtable-result-row > b { font-size: 11px; }
 
 @media (max-width: 390px) {
-  .roundtable-arena { height: 330px; }
-  .roundtable-seat { width: 70px; padding: 6px 3px; }
+  .roundtable-arena { height: clamp(196px, 28vh, 238px); }
+  .roundtable-seat { width: 64px; padding: 5px 3px; }
   .roundtable-seat b { font-size: 10px; }
-  .roundtable-center { width: 60%; height: 51%; padding-inline: 7px; }
-  .roundtable-history-row { grid-template-columns: 38px 1fr; gap: 4px; }
-  .roundtable-form.challenge { grid-template-columns: 1fr auto; }
-  .roundtable-form.challenge .ghost { grid-column: 1 / -1; }
+  .roundtable-center { width: 61%; height: 54%; padding: 8px 6px; }
+  .roundtable-history-row { grid-template-columns: 34px 1fr; gap: 3px; }
 }
 
 body.watching .board-wrap, body.watching .keyboard { display: none !important; }
@@ -303,6 +310,15 @@ body.watching .mini-line > span { font-size: 13px; min-width: 48px; color: var(-
 .key.present { background: var(--present); color: var(--ink-on); }
 .key.absent  { background: var(--absent); color: var(--ink-on); }
 .key:active { opacity: .7; }
+
+body.roundtable-playing .board-wrap { flex: none; min-height: auto; padding: 2px 10px 6px; }
+body.roundtable-playing .board { width: min(78vw, 320px) !important; gap: 4px; }
+body.roundtable-playing .row { gap: 4px; }
+body.roundtable-playing .tile { border-radius: 8px; }
+body.roundtable-playing .keyboard { padding-top: 7px; gap: 5px; }
+body.roundtable-playing .krow { gap: 4px; }
+body.roundtable-playing .key { height: 46px; }
+body.roundtable-playing .key.submit { visibility: hidden; pointer-events: none; }
 
 .resultbar { padding: 0 10px 10px; background: var(--bg-key); }
 .resultbar .btn { background: var(--accent); color: var(--ink-on); width: 100%; }
@@ -431,6 +447,11 @@ body.watching .mini-line > span { font-size: 13px; min-width: 48px; color: var(-
 @media (max-height: 660px) {
   .key { height: 46px; font-size: 16px; }
   .topbar { padding: 4px 6px; }
+  body.roundtable-playing .roundtable-arena { height: 180px; }
+  body.roundtable-playing .roundtable-seat { width: 60px; padding-block: 3px; }
+  body.roundtable-playing .roundtable-submit { min-height: 49px; padding-block: 6px; }
+  body.roundtable-playing .roundtable-submit span { margin-top: 1px; }
+  body.roundtable-playing .key { height: 40px; }
 }
 </style>
 </head>
@@ -501,6 +522,7 @@ body.watching .mini-line > span { font-size: 13px; min-width: 48px; color: var(-
     <div class="peers" id="peers" hidden></div>
     <div class="round-table-mode" id="roundTable" hidden></div>
     <div class="board-wrap"><div class="board" id="board"></div></div>
+    <div class="roundtable-action" id="roundtableAction" hidden></div>
 
     <div class="final-chance" id="finalChance" hidden></div>
     <div class="keyboard" id="keyboard"></div>
@@ -997,7 +1019,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '⬜' }
   const MODE_LABEL = {
     daily: '오늘의 문제', free: '무한 연습', custom: '친구가 낸 문제',
-    versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 추리',
+    versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 모드',
   }
 
   const $ = (sel) => document.querySelector(sel)
@@ -1109,7 +1131,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const answer = word || (mode === 'daily' ? dailyAnswer(kstToday(), size) : freeAnswer(size))
     state = {
       mode, size, answer, locked: Boolean(locked),
-      maxTries: Math.max(MAX_TRIES, Math.floor(Number(maxTries) || MAX_TRIES)),
+      maxTries: mode === 'roundtable' ? 1 : Math.max(MAX_TRIES, Math.floor(Number(maxTries) || MAX_TRIES)),
       answerJamo: Array.from(H.decompose(answer)),
       guesses: [], current: [], status: 'playing',
       date: kstToday(), room: globalThis.Room?.current?.code || null,
@@ -1340,7 +1362,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (guess.length < state.size) return reject('자모를 다 채워주세요')
     // 친구가 직접 낸 문제는 내장 사전에 없을 수도 있다. 정답 그 자체만은 제출할 수 있게 한다.
     const isAnswer = guess.join('') === state.answerJamo.join('')
-    if (!isValid(guess) && !isAnswer) return reject('사전에 없는 단어예요')
+    const unknownAllowed = Boolean(state.room && globalThis.Room?.allowUnknownGuess?.())
+    if (!isValid(guess) && !isAnswer && !unknownAllowed) return reject('사전에 없는 단어예요')
     // 협동은 방장이 한 줄을 확정한 뒤 모든 화면에 똑같이 적용한다.
     // 여기서 로컬 보드를 먼저 바꾸면 참가자마다 행/턴이 갈라질 수 있다.
     if (state.room && globalThis.Room?.submitCoop?.(guess.slice())) return
@@ -1386,6 +1409,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     }, marks.length * 180 + 420)
   }
   function setJudge(next) { judge = typeof next === 'function' ? next : (guess) => H.score(guess, state.answerJamo) }
+  function clearCurrent() { if (state) { state.current = []; paint() } }
   function applyRemote(fn) { if (busy) pending.push(fn); else fn() }
   function flushRemote() {
     const q = pending
@@ -1783,7 +1807,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     get busy() { return busy },
     shareText, shareUrl, freeAnswer, resolveSize,
     SHEETS, GOES, ACTIONS, openSheet, closeSheet, toast, store, isValid, b64url,
-    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn, refitBoard: scheduleFitBoard,
+    MAX_TRIES, SIZES, setJudge, applyRemote, applyRoomTurn, clearCurrent, refitBoard: scheduleFitBoard,
     repaint: () => { if (state) paint() },
     restoreRoomGame: (guesses, status = 'playing') => {
       if (!state || !state.room) return
@@ -1815,13 +1839,13 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   const TO_WIRE = { absent: '0', present: '1', correct: '2' }
   const FROM_WIRE = ['absent', 'present', 'correct']
-  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 추리', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전' }
+  const MODES = { versus: '같은 단어 대결', setter: '출제 대결', relay: '연판', captain: '서바이벌', tournament: '토너먼트', roundtable: '원탁 모드', coop: '협동', team: '팀전', teamsetter: '팀 출제 대결', spy: '스파이전' }
   const MODE_GROUPS = { solo: ['versus', 'setter', 'relay', 'captain', 'tournament', 'roundtable'], team: ['coop', 'team', 'teamsetter', 'spy'] }
   const TEAM_NAMES = { red: '빨강팀', blue: '파랑팀' }
   const isTeamMode = (kind = room?.kind) => ['team', 'teamsetter', 'spy'].includes(kind)
   const QUICK_MESSAGES = ['ㅋㅋㅋ', '화이팅!', '오 거의 다 왔다!', '천천히 해도 돼']
   let room = null
-  let draft = { kind: 'versus', size: 5, roundsTotal: 1, waitSeconds: 60, eliminateCount: 1 }
+  let draft = { kind: 'versus', size: 5, roundsTotal: 1, waitSeconds: 60, eliminateCount: 1, roundtableFreeWords: false }
   let roomCategory = null
   let timer = null
   let nextTimer = null
@@ -1871,7 +1895,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       guesses: state?.room === room.code ? state.guesses.map((g) => H.encode(g)) : [],
       status: state?.room === room.code ? state.status : 'playing',
       setterPid: room.setterPid, turnPid: room.turnPid, totals: totalsObject(), waitSeconds: room.waitSeconds,
-      eliminateCount: room.eliminateCount, captainAlive: room.captainAlive, tournamentAlive: room.tournamentAlive,
+      eliminateCount: room.eliminateCount, roundtableFreeWords: room.roundtableFreeWords,
+      captainAlive: room.captainAlive, tournamentAlive: room.tournamentAlive,
     })
   }
 
@@ -1896,7 +1921,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     <p><b>칸 수</b></p><div class="room-options">${[4, 5, 6, 7, 0].map((n) => `<button class="chip" data-rsize="${n}" aria-pressed="${draft.size === n}">${n || '랜덤'}${n ? '칸' : ''}</button>`).join('')}</div>
     <div ${draft.kind === 'relay' ? '' : 'hidden'}><p><b>라운드</b></p><div class="room-options">${[1, 3, 5].map((n) => `<button class="chip" data-rounds="${n}" aria-pressed="${draft.roundsTotal === n}">${n}라운드</button>`).join('')}</div></div>
     <div ${draft.kind === 'captain' ? '' : 'hidden'}><p><b>매 판 탈락 인원</b></p><div class="room-options">${[1, 2].map((n) => `<button class="chip" data-eliminate="${n}" aria-pressed="${draft.eliminateCount === n}">${n}명씩 탈락</button>`).join('')}</div></div>
-    <div ${['coop', 'team', 'teamsetter', 'spy', 'roundtable'].includes(draft.kind) ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
+    <div ${['coop', 'team', 'teamsetter', 'spy', 'roundtable', 'tournament'].includes(draft.kind) ? 'hidden' : ''}><p><b>첫 완주 후 대기</b></p><div class="room-options">${[30, 60, 90, 0].map((n) => `<button class="chip" data-wait="${n}" aria-pressed="${draft.waitSeconds === n}">${n ? `${n}초` : '제한 없음'}</button>`).join('')}</div></div>
+    <div ${draft.kind === 'roundtable' ? '' : 'hidden'}><p><b>입력 단어</b></p><div class="room-options"><button class="chip" data-roundtable-free="false" aria-pressed="${!draft.roundtableFreeWords}">사전 단어만</button><button class="chip" data-roundtable-free="true" aria-pressed="${draft.roundtableFreeWords}">사전에 없는 단어도 허용</button></div></div>
     <p class="muted">${draft.kind === 'setter' ? '방장이 로비에서 출제자를 고릅니다.' : draft.kind === 'relay' ? '여러 판 점수를 더해 최종 승자를 정합니다.' : draft.kind === 'captain' ? '오답자는 모두 탈락하고, 전원이 맞히면 느린 참가자가 탈락합니다.' : draft.kind === 'tournament' ? '매 라운드 1대1로 겨뤄 먼저 맞힌 사람만 다음 대진에 진출합니다.' : draft.kind === 'roundtable' ? '원탁을 돌며 색 힌트를 공개하고, 눈치챈 사람은 언제든 정답에 도전합니다.' : draft.kind === 'coop' ? '한 보드를 공유하며 차례대로 한 줄씩 냅니다.' : draft.kind === 'team' ? '두 팀이 공유 보드로 풀며, 마지막 기회는 팀 정답률로 승부합니다.' : draft.kind === 'teamsetter' ? '각 팀 출제자가 상대 팀이 풀 서로 다른 단어를 냅니다.' : draft.kind === 'spy' ? '각 팀에 숨어든 스파이는 자기 팀이 져야 개인 승리합니다.' : '모두 같은 단어를 동시에 풉니다.'}</p>
     <div class="sheet-actions"><button class="btn primary" data-act="room-create">방 만들기</button></div>`
   TW.SHEETS.roommenu = () => {
@@ -1906,6 +1932,10 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       <button class="btn ghost" data-act="room-copy">초대 ${TW.shareUrl() ? '링크' : '코드'} 복사</button>
       ${room.host && room.startedAt && !room.over ? '<button class="btn accent" data-act="room-force">모두 강제 종료</button>' : ''}
       <button class="btn ghost" data-go="leave">방 나가기</button></div>`
+  }
+  TW.SHEETS.changemode = () => {
+    if (!room?.host || room.startedAt) return '<h2>지금은 모드를 바꿀 수 없어요</h2><p>게임이 끝나고 대기방으로 돌아오면 바꿀 수 있습니다.</p>'
+    return `<h2>방 모드 바꾸기</h2><p class="muted">같은 방과 참가자를 유지한 채 다음 게임 설정을 바꿉니다.</p>${Object.entries(MODE_GROUPS).map(([group, kinds]) => `<p><b>${group === 'solo' ? '개인전' : '팀전'}</b></p><div class="room-mode-grid">${kinds.map((kind) => `<button class="btn" data-change-room-mode="${kind}" aria-pressed="${room.kind === kind}">${MODES[kind]}</button>`).join('')}</div>`).join('')}<p><b>칸 수</b></p><div class="room-options">${[4, 5, 6, 7, 0].map((size) => `<button class="chip" data-change-room-size="${size}" aria-pressed="${room.size === size}">${size || '랜덤'}${size ? '칸' : ''}</button>`).join('')}</div>${room.kind === 'roundtable' ? `<p><b>입력 단어</b></p><div class="room-options"><button class="chip" data-change-roundtable-free="false" aria-pressed="${!room.roundtableFreeWords}">사전 단어만</button><button class="chip" data-change-roundtable-free="true" aria-pressed="${room.roundtableFreeWords}">사전에 없는 단어도 허용</button></div>` : ''}<div class="sheet-actions"><button class="btn primary" data-close>설정 완료</button></div>`
   }
   TW.SHEETS.spyrole = () => {
     if (!room || room.kind !== 'spy') return '<h2>역할을 찾지 못했어요</h2>'
@@ -1928,7 +1958,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (!room || room.kind !== 'roundtable') return '<h2>결과를 찾지 못했어요</h2>'
     const winner = room.roundtableWinner
     const history = room.roundtableRows.map((entry) => `<div class="roundtable-result-row"><b>${esc(playerName(entry.pid))}</b>${roundtableTiles(entry)}</div>`).join('')
-    return `${celebration(Boolean(winner))}<h2>${winner ? `${crownedName(playerName(winner))}님이 정답을 알아냈어요!` : '원탁 추리 종료'}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${winner ? '가장 먼저 정답 도전에 성공했습니다.' : '방장이 게임을 종료했습니다.'}</span></div><div class="roundtable-result-history">${history}</div><div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
+    return `${celebration(Boolean(winner))}<h2>${winner ? `${crownedName(playerName(winner))}님이 정답을 알아냈어요!` : '원탁 모드 종료'}</h2><div class="answer-reveal"><b>${esc(room.answer || '')}</b><span>${winner ? '가장 먼저 정답 도전에 성공했습니다.' : '방장이 게임을 종료했습니다.'}</span></div><div class="roundtable-result-history">${history}</div><div class="sheet-actions">${rematchControls()}<button class="btn ghost" data-go="leave">나가기</button></div>`
   }
   TW.SHEETS.pickword = () => `<h2>문제 내기</h2><p class="muted">${room?.kind === 'teamsetter' ? `<b>${TEAM_NAMES[room.pick?.targetTeam]}</b>이 풀 단어를 내 주세요. ` : ''}한글 단어를 입력하세요. 자음과 모음으로 펼쳤을 때 <b>${room?.pick?.size || room?.size || 5}칸</b>이어야 합니다.</p>
     <div style="margin-top:16px"><input class="field" id="roomWord" autofocus placeholder="예: 시민" maxlength="8" autocomplete="off" spellcheck="false"><div class="hint" id="roomWordHint">단어를 입력해 주세요</div></div>
@@ -1959,6 +1989,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     'room-chat-send': () => sendChat($('#roomChatInput')?.value, room?.chatScope),
     'room-random-teams': randomizeTeams,
     'room-tournament-ready': requestTournamentReady,
+    'room-roundtable-submit': () => TW.submit(),
     'room-manual-teams': () => { if (room?.host && isTeamMode() && !room.startedAt) { room.teamsHidden = false; balanceTeams(); ensureTeamSetters(); renderLobby(); broadcastLobby() } },
   })
   function readNick() {
@@ -2001,13 +2032,14 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       const teamRole = isTeamMode() && !room.teamsHidden ? `<em class="team-label ${team}">${TEAM_NAMES[team]}${setterTeam ? ' · 출제자' : ''}</em>` : ''
       return `<li><b>${esc(names.get(p.pid))}${p.pid === room.me.pid ? ' (나)' : ''}</b>${teamRole}<span>${role}</span>${pick}${teamPick}${teamSetterPick}</li>`
     }).join('')
-    const wait = ['spy', 'roundtable'].includes(room.kind) ? ' · 제한시간 없음' : isTeamMode() ? ' · 선두 팀 후 30초' : room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
-    const detail = `${MODES[room.kind]} · ${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : room.kind === 'captain' ? ` · 매 판 최소 ${room.eliminateCount}명 탈락` : room.kind === 'tournament' ? ' · 1대1 진출전' : ''}${wait}`
+    const wait = ['spy', 'roundtable', 'tournament'].includes(room.kind) ? ' · 제한시간 없음' : isTeamMode() ? ' · 선두 팀 후 30초' : room.kind !== 'coop' ? ` · 완주 후 ${room.waitSeconds ? `${room.waitSeconds}초` : '제한 없음'}` : ''
+    const detail = `${room.size ? `${room.size}칸` : '랜덤 칸'}${room.kind === 'relay' ? ` · ${room.roundsTotal}라운드` : room.kind === 'captain' ? ` · 매 판 최소 ${room.eliminateCount}명 탈락` : room.kind === 'tournament' ? ' · 1대1 진출전' : room.kind === 'roundtable' ? ` · ${room.roundtableFreeWords ? '자유 단어 허용' : '사전 단어만'}` : ''}${wait}`
+    const modeCard = `<div class="lobby-mode-card"><span>현재 모드</span><strong>${esc(MODES[room.kind])}</strong><small>${esc(detail)}</small></div>`
     const teamControls = room.host && isTeamMode() ? `<div class="sheet-actions team-lobby-actions">${room.teamsHidden ? '<button class="btn" data-act="room-manual-teams">수동 배정으로 바꾸기</button>' : '<button class="btn accent" data-act="room-random-teams">랜덤 팀 · 비공개</button>'}</div>` : ''
     const hiddenNotice = isTeamMode() && room.teamsHidden ? '<br><b>비밀 팀 배정 완료</b> · 게임이 시작되면 공개됩니다.' : ''
     $('#lobbyActions').innerHTML = room.host
-      ? `<p class="muted">${detail}${hiddenNotice}${choose ? '<br>아래에서 출제자를 선택한 뒤 시작하세요.' : chooseTeam ? '<br>참가자를 두 팀으로 나눈 뒤 시작하세요.' : ''}</p>${teamControls}<button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
-      : `<p class="muted">${detail}${hiddenNotice}<br>방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
+      ? `${modeCard}<p class="muted">${hiddenNotice}${choose ? '<br>아래에서 출제자를 선택한 뒤 시작하세요.' : chooseTeam ? '<br>참가자를 두 팀으로 나눈 뒤 시작하세요.' : ''}</p>${teamControls}<button class="btn ghost" data-sheet="changemode">모드 바꾸기</button><button class="btn primary" data-act="room-start" ${Net.status === 'live' ? '' : 'disabled'}>시작하기</button><button class="btn ghost" data-go="leave">나가기</button>`
+      : `${modeCard}<p class="muted">${hiddenNotice}<br>방장이 시작하기를 기다리는 중…</p><button class="btn ghost" data-go="leave">나가기</button>`
     $('#lobbyStatus').textContent = ({ off: '오프라인', connecting: '연결하는 중…', live: '연결됨', retry: '다시 연결하는 중…', down: '연결을 기다리는 중…' })[Net.status] || Net.status
     renderQuickChat()
   }
@@ -2021,6 +2053,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       roundsTotal: draft.kind === 'relay' ? Number(draft.roundsTotal) || 3 : 1, size: draft.size,
       waitSeconds: [0, 30, 60, 90].includes(Number(draft.waitSeconds)) ? Number(draft.waitSeconds) : 60,
       eliminateCount: [1, 2].includes(Number(draft.eliminateCount)) ? Number(draft.eliminateCount) : 1,
+      roundtableFreeWords: Boolean(draft.roundtableFreeWords),
       me, host: false, hostPid: null, peers: new Map([[me.pid, { ...me, rows: [], status: 'waiting', online: true }]]),
       activePids: new Set(), participants: [], results: new Map(), totals: new Map(Object.entries(resume?.totals || {})),
       startedAt: null, answer: null, over: false, final: false, scoreResults: [],
@@ -2034,7 +2067,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       captainAlive: [], captainEliminated: [], captainChampion: null,
       tournamentAlive: [], tournamentPairs: [], tournamentByes: [], tournamentEliminated: [], tournamentChampion: null,
       tournamentWords: {}, tournamentMatches: new Map(), tournamentReady: new Set(), tournamentNextAt: null,
-      roundtableSeats: [], roundtableRows: [], roundtableLocked: new Set(), roundtableWinner: null, roundtablePending: false, roundtableChallengeOpen: false,
+      roundtableSeats: [], roundtableRows: [], roundtableLocked: new Set(), roundtableWinner: null, roundtablePending: false,
     }
     globalThis.TWRoomHash = null
     persistRoom(); showLobby()
@@ -2047,13 +2080,13 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     teamEndTimer = teamFinalTimers.red = teamFinalTimers.blue = teamSkipTimers.red = teamSkipTimers.blue = null
     Net.leave(); room = null; TW.store.set('tw.room.v1', null)
     document.body.classList.remove('watching', 'roundtable-playing')
-    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roundTable').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#lobbyChat').hidden = true; $('#finalChance').hidden = true
+    $('#keyboard').hidden = false; $('.board-wrap').hidden = false; $('#peers').hidden = true; $('#roundTable').hidden = true; $('#roundtableAction').hidden = true; $('#roomBanner').hidden = true; $('#quickChat').hidden = true; $('#lobbyChat').hidden = true; $('#finalChance').hidden = true
     $('#btnBack').dataset.go = 'home'; $('#btnMenu').dataset.sheet = 'stats'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '기록')
     TW.GOES.home()
   }
 
   function teamsObject() { return Object.fromEntries(room?.teams || []) }
-  function lobbyPayload() { return { kind: room.kind, size: room.size, roundsTotal: room.roundsTotal, setterPid: room.setterPid, waitSeconds: room.waitSeconds, eliminateCount: room.eliminateCount, teamsHidden: room.teamsHidden, teams: room.teamsHidden ? {} : teamsObject(), teamSetters: room.teamsHidden ? {} : room.teamSetters } }
+  function lobbyPayload() { return { kind: room.kind, size: room.size, roundsTotal: room.roundsTotal, setterPid: room.setterPid, waitSeconds: room.waitSeconds, eliminateCount: room.eliminateCount, roundtableFreeWords: room.roundtableFreeWords, teamsHidden: room.teamsHidden, teams: room.teamsHidden ? {} : teamsObject(), teamSetters: room.teamsHidden ? {} : room.teamSetters } }
   function broadcastLobby() {
     if (room?.host && !room.startedAt && Net.status === 'live') Net.send('lobby', lobbyPayload())
   }
@@ -2064,6 +2097,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     room.kind = payload.kind; room.size = size
     room.roundsTotal = payload.kind === 'relay' && [1, 3, 5].includes(rounds) ? rounds : 1
     room.waitSeconds = [0, 30, 60, 90].includes(Number(payload.waitSeconds)) ? Number(payload.waitSeconds) : 60
+    room.roundtableFreeWords = Boolean(payload.roundtableFreeWords)
     room.setterPid = String(payload.setterPid || room.hostPid || '')
     room.eliminateCount = [1, 2].includes(Number(payload.eliminateCount)) ? Number(payload.eliminateCount) : 1
     if (isTeamMode(payload.kind)) {
@@ -2173,7 +2207,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       if (room.tournamentAlive.length < 2) return TW.toast('토너먼트는 두 명 이상 필요해요')
       prepareTournamentRound()
     }
-    if (room.kind === 'roundtable' && onlinePlayers().length < 2) return TW.toast('원탁 추리는 두 명 이상 필요해요')
+    if (room.kind === 'roundtable' && onlinePlayers().length < 2) return TW.toast('원탁 모드는 두 명 이상 필요해요')
     if (room.kind === 'setter') {
       const setterPid = room.peers.get(room.setterPid)?.online ? room.setterPid : room.hostPid
       room.setterPid = setterPid; room.pick = { round: room.round, setterPid, size }
@@ -2239,6 +2273,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       tournamentAlive: room.kind === 'tournament' ? room.tournamentAlive : null, tournamentPairs: room.kind === 'tournament' ? room.tournamentPairs : null, tournamentByes: room.kind === 'tournament' ? room.tournamentByes : null,
       tournamentWords: room.kind === 'tournament' ? room.tournamentWords : null,
       roundtableSeats: room.kind === 'roundtable' ? room.roundtableSeats : null,
+      roundtableFreeWords: room.kind === 'roundtable' ? room.roundtableFreeWords : null,
     }
     Net.send('start', payload); beginRound(payload, false)
   }
@@ -2345,7 +2380,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     }
     if (room.kind === 'roundtable') {
       room.roundtableSeats = Array.from(new Set((Array.isArray(payload.roundtableSeats) ? payload.roundtableSeats : room.participants).map(String))).filter((pid) => room.activePids.has(pid))
-      room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false; room.roundtableChallengeOpen = false
+      room.roundtableFreeWords = Boolean(payload.roundtableFreeWords)
+      room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false
     }
     if (isTeamMode()) {
       room.teamsHidden = false
@@ -2366,7 +2402,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     room.turnPid = ['coop', 'roundtable'].includes(room.kind) ? String(payload.turnPid || room.participants[0] || '') : null
     const myTeam = room.teams.get(room.me.pid)
     if (isTeamMode()) { answer = room.teamAnswers?.[myTeam] || room.teamAnswers?.red || answer; room.answer = answer; room.chatScope = myTeam ? 'team' : 'all' }
-    room.maxTries = room.kind === 'coop' ? Math.max(TW.MAX_TRIES, Number(payload.maxTries) || room.participants.length) : isTeamMode() ? room.teamMaxTries[myTeam] || TW.MAX_TRIES : TW.MAX_TRIES
+    room.maxTries = room.kind === 'roundtable' ? 1 : room.kind === 'coop' ? Math.max(TW.MAX_TRIES, Number(payload.maxTries) || room.participants.length) : isTeamMode() ? room.teamMaxTries[myTeam] || TW.MAX_TRIES : TW.MAX_TRIES
     room.startedAt = Date.now(); room.over = false; room.final = false; room.results = new Map(); room.scoreResults = []
     room.waitEndsAt = null; room.coopPending = false; room.finalChance = null
     room.readyPids = new Set(); room.readyVoters = new Set(); room.resultSheet = 'scoreboard'; clearTimeout(waitTimer); clearTimeout(finalTimer)
@@ -2379,7 +2415,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     $('#btnBack').dataset.go = 'leave'; $('#btnMenu').dataset.sheet = 'roommenu'; $('#btnMenu').textContent = '☰'; $('#btnMenu').setAttribute('aria-label', '방 메뉴')
     const watching = room.me.role !== 'player'
     document.body.classList.toggle('watching', watching); document.body.classList.toggle('roundtable-playing', room.kind === 'roundtable')
-    $('#keyboard').hidden = watching || room.kind === 'roundtable'; $('.board-wrap').hidden = watching || room.kind === 'roundtable'
+    $('#keyboard').hidden = watching; $('.board-wrap').hidden = watching
     $('#peers').hidden = ['coop', 'roundtable'].includes(room.kind); $('#roundTable').hidden = room.kind !== 'roundtable'
     $('#finalChance').hidden = true
     renderPeers(); renderRoundTable(); renderBanner(); renderQuickChat(); TW.refitBoard(); startTimer(); persistRoom()
@@ -2434,6 +2470,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   }
   function canPlay() {
     if (!room || room.me.role !== 'player' || room.over || room.finalChance?.active) return false
+    if (room.kind === 'roundtable') return !room.roundtablePending && (room.turnPid === room.me.pid || !room.roundtableLocked.has(room.me.pid))
     if (room.kind === 'coop') return room.turnPid === room.me.pid && !room.coopPending
     if (isTeamMode()) {
       const team = room.teams.get(room.me.pid)
@@ -2444,6 +2481,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   function blockedInput() {
     if (!room || Date.now() - lastBlocked < 1200) return
     lastBlocked = Date.now()
+    if (room.kind === 'roundtable') return TW.toast(room.roundtablePending ? '제출을 확인하는 중이에요' : room.roundtableLocked.has(room.me.pid) ? '다음 내 차례에 색 힌트를 낸 뒤 다시 도전할 수 있어요' : '지금은 입력할 수 없어요')
     const team = isTeamMode() ? room.teams.get(room.me.pid) : null
     TW.toast(room.me.role !== 'player' ? '이번 라운드는 관전 중이에요' : room.coopPending || room.teamPending ? '제출을 확인하는 중이에요' : `${playerName(team ? room.teamTurns[team] : room.turnPid)}님 차례예요`)
   }
@@ -2613,9 +2651,9 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     persistRoom()
   }
   function roundtableWord(value) {
-    const raw = String(value || '').trim(); const decomposed = H.decompose(raw); const guess = decomposed ? Array.from(decomposed) : []
+    const raw = String(value || '').trim(); const decomposed = H.decompose(raw); const guess = Array.isArray(value) ? value.slice() : decomposed ? Array.from(decomposed) : []
     const exact = guess.join('') === Array.from(H.decompose(room?.answer || '') || '').join('')
-    return { raw, guess, valid: guess.length === room?.size && (exact || TW.isValid(guess)) }
+    return { raw, guess, valid: guess.length === room?.size && (room?.roundtableFreeWords || exact || TW.isValid(guess)) }
   }
   function roundtableNext(pid, onlineOnly = false) {
     const seats = room?.roundtableSeats.filter((id) => room.activePids.has(id) && (!onlineOnly || room.peers.get(id)?.online)) || []
@@ -2628,7 +2666,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   }
   function renderRoundTable() {
     const root = $('#roundTable')
-    if (!root || !room || room.kind !== 'roundtable' || !room.startedAt) { if (root) root.hidden = true; return }
+    const action = $('#roundtableAction')
+    if (!root || !room || room.kind !== 'roundtable' || !room.startedAt) { if (root) root.hidden = true; if (action) action.hidden = true; return }
     const total = Math.max(1, room.roundtableSeats.length)
     const seats = room.roundtableSeats.map((pid, index) => {
       const angle = -Math.PI / 2 + index * Math.PI * 2 / total
@@ -2638,16 +2677,21 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     }).join('')
     const rows = room.roundtableRows.length ? room.roundtableRows.slice(-8).map((entry) => `<div class="roundtable-history-row"><span>${esc(playerName(entry.pid))}</span>${roundtableTiles(entry)}</div>`).join('') : '<p class="roundtable-empty">첫 번째 색 힌트를 기다리는 중…</p>'
     const myTurn = room.turnPid === room.me.pid && room.me.role === 'player'; const locked = room.roundtableLocked.has(room.me.pid)
-    const clue = myTurn ? `<form class="roundtable-form" data-roundtable-clue-form><input class="field" id="roundtableClue" maxlength="8" placeholder="색 힌트로 공개할 단어" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn primary" type="submit" ${room.roundtablePending ? 'disabled' : ''}>공개하기</button></form>` : `<p class="roundtable-wait">${esc(playerName(room.turnPid))}님이 색 힌트를 고르는 중이에요.</p>`
-    const challenge = locked ? '<p class="roundtable-penalty">정답 도전 실패 · 다음 내 차례에 일반 단어를 내면 다시 도전할 수 있어요.</p>' : room.roundtableChallengeOpen ? `<form class="roundtable-form challenge" data-roundtable-answer-form><input class="field" id="roundtableAnswer" maxlength="8" placeholder="비공개 정답 입력" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn accent" type="submit" ${room.roundtablePending ? 'disabled' : ''}>정답 제출</button><button class="btn ghost" type="button" data-roundtable-challenge-close>취소</button></form><p class="roundtable-rule">실패해도 입력한 단어는 다른 사람에게 보이지 않아요.</p>` : '<button class="btn accent roundtable-challenge" data-roundtable-challenge-open>정답 도전!</button>'
-    root.innerHTML = `<div class="roundtable-arena">${seats}<section class="roundtable-center"><strong>공개된 색 힌트</strong><div class="roundtable-history">${rows}</div></section></div><div class="roundtable-controls">${clue}${challenge}</div>`
+    root.innerHTML = `<div class="roundtable-arena">${seats}<section class="roundtable-center"><strong>원탁 공개 단어</strong><div class="roundtable-history">${rows}</div></section></div>`
     root.hidden = false
-    if (myTurn && !room.roundtablePending) setTimeout(() => $('#roundtableClue')?.focus(), 0)
+    if (action) {
+      const disabled = room.me.role !== 'player' || room.roundtablePending || !myTurn && locked
+      const tone = myTurn ? 'my-turn' : locked ? 'locked' : 'challenge-turn'
+      const title = room.roundtablePending ? '제출을 확인하는 중…' : myTurn ? '내 차례 · 색 힌트 공개하기' : locked ? '정답 도전 기회 사용 중' : '다른 사람 차례 · 지금 정답 도전'
+      const note = myTurn ? `입력한 단어와 색을 모두에게 공개합니다${room.roundtableFreeWords ? ' · 자유 단어 허용' : ''}` : locked ? '다음 내 차례에 색 힌트를 내면 다시 도전할 수 있습니다' : '틀리면 다음 내 차례까지 다시 도전할 수 없습니다'
+      action.innerHTML = `<button class="roundtable-submit ${tone}" data-act="room-roundtable-submit" ${disabled ? 'disabled' : ''}><b>${title}</b><span>${note}</span></button>`
+      action.hidden = room.me.role !== 'player' || room.over
+    }
   }
   function submitRoundtableClue(value) {
     if (!room || room.kind !== 'roundtable' || room.over || room.turnPid !== room.me.pid || room.roundtablePending) return
     const word = roundtableWord(value)
-    if (!word.valid) return TW.toast(`자모 ${room.size}칸의 사전 단어를 입력해 주세요`)
+    if (!word.valid) return TW.toast(`자모 ${room.size}칸${room.roundtableFreeWords ? '을 모두' : '의 사전 단어를'} 입력해 주세요`)
     room.roundtablePending = true; renderRoundTable()
     const payload = { phase: 'roundtable-clue-submit', round: room.round, pid: room.me.pid, guess: H.encode(word.guess) }
     if (room.host) processRoundtableClue(payload); else Net.send('turn', payload)
@@ -2659,7 +2703,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     let guess
     try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return rejectRoundtable(pid, '단어를 다시 입력해 주세요') }
     const exact = guess.join('') === Array.from(H.decompose(room.answer) || '').join('')
-    if (guess.length !== room.size || !exact && !TW.isValid(guess)) return rejectRoundtable(pid, '사전에 있는 단어를 입력해 주세요')
+    if (guess.length !== room.size || !room.roundtableFreeWords && !exact && !TW.isValid(guess)) return rejectRoundtable(pid, room.roundtableFreeWords ? `자모 ${room.size}칸을 입력해 주세요` : '사전에 있는 단어를 입력해 주세요')
     const marks = H.score(guess, Array.from(H.decompose(room.answer)))
     const commit = { phase: 'roundtable-clue-commit', round: room.round, pid, guess: H.encode(guess), marks: encodeMarks(marks), nextPid: exact ? null : roundtableNext(pid), won: exact }
     Net.send('turn', commit); applyRoundtableClue(commit)
@@ -2682,14 +2726,15 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const expected = H.score(guess, Array.from(H.decompose(room.answer)))
     if (expected.some((mark, index) => mark !== marks[index])) return
     room.roundtableRows.push({ pid, guess, marks }); room.roundtableLocked.delete(pid)
-    room.roundtablePending = false; room.roundtableChallengeOpen = false
+    room.roundtablePending = false
+    if (pid === room.me.pid) TW.clearCurrent?.()
     if (!payload.won) room.turnPid = String(payload.nextPid || roundtableNext(pid) || '')
     renderRoundTable(); renderBanner(); scheduleRoundtableSkip(); persistRoom()
   }
   function submitRoundtableChallenge(value) {
     if (!room || room.kind !== 'roundtable' || room.over || room.roundtablePending || room.roundtableLocked.has(room.me.pid) || !room.activePids.has(room.me.pid)) return
     const word = roundtableWord(value)
-    if (!word.valid) return TW.toast(`자모 ${room.size}칸의 사전 단어를 입력해 주세요`)
+    if (!word.valid) return TW.toast(`자모 ${room.size}칸${room.roundtableFreeWords ? '을 모두' : '의 사전 단어를'} 입력해 주세요`)
     room.roundtablePending = true; renderRoundTable()
     const payload = { phase: 'roundtable-answer-submit', round: room.round, pid: room.me.pid, guess: H.encode(word.guess) }
     if (room.host) processRoundtableChallenge(payload); else Net.send('turn', payload)
@@ -2700,8 +2745,9 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (!room.activePids.has(pid) || room.roundtableLocked.has(pid)) return rejectRoundtable(pid, '아직 정답에 다시 도전할 수 없어요')
     let guess
     try { guess = Array.from(H.decode(String(payload.guess || ''))) } catch (e) { return rejectRoundtable(pid, '단어를 다시 입력해 주세요') }
-    if (guess.length !== room.size) return rejectRoundtable(pid, `자모 ${room.size}칸을 입력해 주세요`)
-    if (guess.join('') === Array.from(H.decompose(room.answer) || '').join('')) return finishRoundtable(pid)
+    const exact = guess.join('') === Array.from(H.decompose(room.answer) || '').join('')
+    if (guess.length !== room.size || !room.roundtableFreeWords && !exact && !TW.isValid(guess)) return rejectRoundtable(pid, room.roundtableFreeWords ? `자모 ${room.size}칸을 입력해 주세요` : '사전에 있는 단어를 입력해 주세요')
+    if (exact) return finishRoundtable(pid)
     const failed = { phase: 'roundtable-answer-failed', round: room.round, pid }
     Net.send('turn', failed); applyRoundtableChallengeFailed(failed)
   }
@@ -2710,7 +2756,8 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     const pid = String(payload.pid || '')
     if (!room.activePids.has(pid)) return
     room.roundtableLocked.add(pid)
-    if (pid === room.me.pid) { room.roundtablePending = false; room.roundtableChallengeOpen = false }
+    if (pid === room.me.pid) room.roundtablePending = false
+    if (pid === room.me.pid) TW.clearCurrent?.()
     renderRoundTable(); TW.toast(`${playerName(pid)}님 정답 도전 실패!`, 2200); persistRoom()
   }
   function finishRoundtable(winnerPid = null) {
@@ -2725,8 +2772,9 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (Array.isArray(payload.rows)) room.roundtableRows = payload.rows.flatMap((entry) => {
       try { const guess = Array.from(H.decode(String(entry.guess || ''))); const marks = decodeMarks(entry.marks); return guess.length === room.size && marks ? [{ pid: String(entry.pid), guess, marks }] : [] } catch (e) { return [] }
     })
-    room.roundtablePending = false; room.roundtableChallengeOpen = false; clearTimeout(skipTimer); clearInterval(timer)
-    renderRoundTable(); renderBanner(); renderQuickChat(); persistRoom(); TW.endRoomGame(); TW.openSheet('roundtableresult')
+    room.roundtablePending = false; clearTimeout(skipTimer); clearInterval(timer)
+    renderRoundTable(); $('#roundtableAction').hidden = true; $('#keyboard').hidden = true; $('.board-wrap').hidden = true
+    renderBanner(); renderQuickChat(); persistRoom(); TW.endRoomGame(); TW.openSheet('roundtableresult')
   }
   function scheduleRoundtableSkip() {
     clearTimeout(skipTimer)
@@ -2743,7 +2791,13 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     room.turnPid = String(payload.nextPid || ''); room.roundtablePending = false; renderRoundTable(); renderBanner(); scheduleRoundtableSkip()
   }
   function submitCoop(guess) {
-    if (!room || room.kind !== 'coop' && !isTeamMode()) return false
+    if (!room || room.kind !== 'coop' && room.kind !== 'roundtable' && !isTeamMode()) return false
+    if (room.kind === 'roundtable') {
+      if (!canPlay()) { blockedInput(); return true }
+      if (room.turnPid === room.me.pid) submitRoundtableClue(guess)
+      else submitRoundtableChallenge(guess)
+      return true
+    }
     if (isTeamMode()) return submitTeam(guess)
     if (!canPlay()) { blockedInput(); return true }
     room.coopPending = true; renderBanner()
@@ -3579,9 +3633,9 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     room.teamAnswers = null; room.teamPicks = null; room.captainAlive = []; room.captainEliminated = []; room.captainChampion = null
     room.tournamentAlive = []; room.tournamentPairs = []; room.tournamentByes = []; room.tournamentEliminated = []; room.tournamentChampion = null
     room.tournamentWords = {}; room.tournamentMatches = new Map(); room.tournamentReady = new Set(); room.tournamentNextAt = null
-    room.roundtableSeats = []; room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false; room.roundtableChallengeOpen = false
+    room.roundtableSeats = []; room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false
     room.participants = []; room.activePids = new Set(); room.turnPid = null; room.pick = null; room.me.role = 'player'
-    document.body.classList.remove('watching', 'roundtable-playing'); $('#roundTable').hidden = true; showLobby(); persistRoom(); broadcastLobby()
+    document.body.classList.remove('watching', 'roundtable-playing'); $('#roundTable').hidden = true; $('#roundtableAction').hidden = true; showLobby(); persistRoom(); broadcastLobby()
   }
   function onReady(payload) {
     if (!room) return
@@ -3692,11 +3746,12 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   }
   function wireRoundtableState() {
     if (!room || room.kind !== 'roundtable') return null
-    return { seats: room.roundtableSeats, turnPid: room.turnPid, locked: Array.from(room.roundtableLocked), winnerPid: room.roundtableWinner, rows: room.roundtableRows.map((entry) => ({ pid: entry.pid, guess: H.encode(entry.guess), marks: encodeMarks(entry.marks) })) }
+    return { seats: room.roundtableSeats, turnPid: room.turnPid, freeWords: room.roundtableFreeWords, locked: Array.from(room.roundtableLocked), winnerPid: room.roundtableWinner, rows: room.roundtableRows.map((entry) => ({ pid: entry.pid, guess: H.encode(entry.guess), marks: encodeMarks(entry.marks) })) }
   }
   function applyRoundtableSync(state) {
     if (!room || room.kind !== 'roundtable' || !state) return
     room.roundtableSeats = Array.from(new Set((state.seats || []).map(String))).filter((pid) => room.activePids.has(pid))
+    room.roundtableFreeWords = Boolean(state.freeWords)
     room.turnPid = String(state.turnPid || room.roundtableSeats[0] || ''); room.roundtableLocked = new Set((state.locked || []).map(String)); room.roundtableWinner = state.winnerPid ? String(state.winnerPid) : null
     room.roundtableRows = (state.rows || []).flatMap((entry) => {
       try { const guess = Array.from(H.decode(String(entry.guess || ''))); const marks = decodeMarks(entry.marks); return guess.length === room.size && marks ? [{ pid: String(entry.pid), guess, marks }] : [] } catch (e) { return [] }
@@ -3718,7 +3773,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       captain: room.kind === 'captain', captainAlive: room.captainAlive, captainEliminated: room.captainEliminated, captainChampion: room.captainChampion, eliminateCount: room.eliminateCount,
       tournament: room.kind === 'tournament', tournamentAlive: room.tournamentAlive, tournamentPairs: room.tournamentPairs, tournamentByes: room.tournamentByes, tournamentEliminated: room.tournamentEliminated, tournamentChampion: room.tournamentChampion,
       tournamentWords: room.tournamentWords, tournamentMatches: Array.from(room.tournamentMatches.values()), tournamentReady: Array.from(room.tournamentReady), tournamentNextAt: room.tournamentNextAt,
-      roundtable: room.kind === 'roundtable', roundtableSeats: room.roundtableSeats, roundtableState: wireRoundtableState(), winnerPid: room.roundtableWinner, rows: room.kind === 'roundtable' ? wireRoundtableState()?.rows : null,
+      roundtable: room.kind === 'roundtable', roundtableSeats: room.roundtableSeats, roundtableFreeWords: room.roundtableFreeWords, roundtableState: wireRoundtableState(), winnerPid: room.roundtableWinner, rows: room.kind === 'roundtable' ? wireRoundtableState()?.rows : null,
       readyState: room.over ? room.kind === 'tournament' && !room.tournamentChampion
         ? { phase: 'tournament-ready-state', round: room.round, ready: Array.from(room.tournamentReady) }
         : { phase: 'state', round: room.round, ready: Array.from(room.readyPids), voters: Array.from(room.readyVoters.size ? room.readyVoters : new Set(onlinePlayers().map((p) => p.pid))) } : null,
@@ -3783,8 +3838,6 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
   document.addEventListener('click', (event) => {
     const insideChat = event.composedPath().some((node) => node?.classList?.contains('quick-chat'))
     if (room?.chatOpen && !insideChat) { room.chatOpen = false; renderQuickChat() }
-    if (event.target.closest('[data-roundtable-challenge-open]') && room?.kind === 'roundtable') { room.roundtableChallengeOpen = true; renderRoundTable(); setTimeout(() => $('#roundtableAnswer')?.focus(), 0); return }
-    if (event.target.closest('[data-roundtable-challenge-close]') && room?.kind === 'roundtable') { room.roundtableChallengeOpen = false; renderRoundTable(); return }
     const category = event.target.closest('[data-room-category]')
     if (category && ['solo', 'team'].includes(category.dataset.roomCategory)) {
       const nick = $('#roomNick')?.value || ''
@@ -3805,6 +3858,17 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
       const create = document.querySelector('[data-act=room-open-create]'); if (create) create.disabled = false
       return
     }
+    const changeMode = event.target.closest('[data-change-room-mode]')
+    if (changeMode && room?.host && !room.startedAt && Object.hasOwn(MODES, changeMode.dataset.changeRoomMode)) {
+      room.kind = changeMode.dataset.changeRoomMode; room.round = 1; room.roundsTotal = room.kind === 'relay' ? 3 : 1; room.setterPid = room.hostPid
+      if (isTeamMode()) randomizeTeams()
+      else { room.teamsHidden = false; broadcastLobby(); renderLobby() }
+      persistRoom(); TW.openSheet('changemode'); return
+    }
+    const changeSize = event.target.closest('[data-change-room-size]')
+    if (changeSize && room?.host && !room.startedAt) { const size = Number(changeSize.dataset.changeRoomSize); if ([0, ...TW.SIZES].includes(size)) { room.size = size; broadcastLobby(); renderLobby(); persistRoom(); TW.openSheet('changemode') } return }
+    const changeFree = event.target.closest('[data-change-roundtable-free]')
+    if (changeFree && room?.host && !room.startedAt && room.kind === 'roundtable') { room.roundtableFreeWords = changeFree.dataset.changeRoundtableFree === 'true'; broadcastLobby(); renderLobby(); persistRoom(); TW.openSheet('changemode'); return }
     const chat = event.target.closest('[data-chat]')
     if (chat) { sendChat(chat.dataset.chat, room?.chatScope); return }
     const scope = event.target.closest('[data-chat-scope]')
@@ -3823,7 +3887,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (setter && room?.host && room.kind === 'setter' && !room.startedAt) {
       room.setterPid = setter.dataset.setter; renderLobby(); broadcastLobby(); return
     }
-    const target = event.target.closest('[data-rmode],[data-rsize],[data-rounds],[data-wait],[data-eliminate]')
+    const target = event.target.closest('[data-rmode],[data-rsize],[data-rounds],[data-wait],[data-eliminate],[data-roundtable-free]')
     if (!target || target.disabled) return
     if (target.dataset.rmode) {
       draft.kind = target.dataset.rmode
@@ -3835,6 +3899,7 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (target.dataset.rounds !== undefined) draft.roundsTotal = Number(target.dataset.rounds)
     if (target.dataset.wait !== undefined) draft.waitSeconds = Number(target.dataset.wait)
     if (target.dataset.eliminate !== undefined) draft.eliminateCount = Number(target.dataset.eliminate)
+    if (target.dataset.roundtableFree !== undefined) draft.roundtableFreeWords = target.dataset.roundtableFree === 'true'
     for (const chip of target.parentElement.querySelectorAll('.chip')) chip.setAttribute('aria-pressed', String(chip === target))
   })
   document.addEventListener('input', (event) => {
@@ -3842,10 +3907,6 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     if (event.target.id === 'finalWord') paintFinalWord()
   })
   document.addEventListener('submit', (event) => {
-    const clueForm = event.target.closest('[data-roundtable-clue-form]')
-    if (clueForm) { event.preventDefault(); submitRoundtableClue(clueForm.querySelector('#roundtableClue')?.value); return }
-    const answerForm = event.target.closest('[data-roundtable-answer-form]')
-    if (answerForm) { event.preventDefault(); submitRoundtableChallenge(answerForm.querySelector('#roundtableAnswer')?.value); return }
     const chatForm = event.target.closest('[data-room-chat-form]')
     if (!chatForm) return
     event.preventDefault()
@@ -3868,10 +3929,10 @@ globalThis.TWConfig = {"url":"https://hwmvvmjfymwborledvjc.supabase.co","key":"s
     roomButton.hidden = false
     const resume = TW.store.get('tw.room.v1', null)
     if (globalThis.TWRoomHash) setTimeout(() => { draft.kind = null; roomCategory = null; TW.openSheet('rooms') }, 0)
-    else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(resume.code, resume.nick, { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1, waitSeconds: [0, 30, 60, 90].includes(Number(resume.waitSeconds)) ? Number(resume.waitSeconds) : 60, eliminateCount: [1, 2].includes(Number(resume.eliminateCount)) ? Number(resume.eliminateCount) : 1 }, resume), 0)
+    else if (resume?.code && resume?.nick) setTimeout(() => enterRoom(resume.code, resume.nick, { kind: resume.kind || 'versus', size: Number(resume.size) || 5, roundsTotal: Number(resume.roundsTotal) || 1, waitSeconds: [0, 30, 60, 90].includes(Number(resume.waitSeconds)) ? Number(resume.waitSeconds) : 60, eliminateCount: [1, 2].includes(Number(resume.eliminateCount)) ? Number(resume.eliminateCount) : 1, roundtableFreeWords: Boolean(resume.roundtableFreeWords) }, resume), 0)
   } else { roomButton.remove(); globalThis.TWRoomHash = null }
 
-  globalThis.Room = { get current() { return room }, localMark, localDone, submitCoop, canPlay, blockedInput, leave: leaveRoom, normalizeCode, repaintPeers: renderPeers }
+  globalThis.Room = { get current() { return room }, localMark, localDone, submitCoop, canPlay, blockedInput, allowUnknownGuess: () => Boolean(room?.kind === 'roundtable' && room.roundtableFreeWords), leave: leaveRoom, normalizeCode, repaintPeers: renderPeers }
 })()
 </script>
 </body>

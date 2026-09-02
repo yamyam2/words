@@ -67,6 +67,7 @@
       setterPid: room.setterPid, turnPid: room.turnPid, totals: totalsObject(), waitSeconds: room.waitSeconds,
       eliminateCount: room.eliminateCount, roundtableFreeWords: room.roundtableFreeWords,
       captainAlive: room.captainAlive, tournamentAlive: room.tournamentAlive,
+      tournamentSeed: room.tournamentSeed, tournamentRounds: room.tournamentRounds,
     })
   }
 
@@ -236,6 +237,7 @@
       spies: { red: null, blue: null }, isSpy: false,
       captainAlive: [], captainEliminated: [], captainChampion: null,
       tournamentAlive: [], tournamentPairs: [], tournamentByes: [], tournamentEliminated: [], tournamentChampion: null,
+      tournamentSeed: (resume?.tournamentSeed || []).map(String), tournamentRounds: normalizeTournamentRounds(resume?.tournamentRounds),
       tournamentWords: {}, tournamentMatches: new Map(), tournamentReady: new Set(), tournamentNextAt: null,
       roundtableSeats: [], roundtableRows: [], roundtableLocked: new Set(), roundtableWinner: null, roundtablePending: false,
     }
@@ -373,6 +375,7 @@
       if (!room.tournamentAlive.length) {
         room.tournamentAlive = onlinePlayers().map((p) => p.pid)
         for (let i = room.tournamentAlive.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [room.tournamentAlive[i], room.tournamentAlive[j]] = [room.tournamentAlive[j], room.tournamentAlive[i]] }
+        room.tournamentSeed = room.tournamentAlive.slice(); room.tournamentRounds = []
       }
       if (room.tournamentAlive.length < 2) return TW.toast('토너먼트는 두 명 이상 필요해요')
       prepareTournamentRound()
@@ -442,6 +445,7 @@
       eliminateCount: room.eliminateCount, captainAlive: room.kind === 'captain' ? participants : null,
       tournamentAlive: room.kind === 'tournament' ? room.tournamentAlive : null, tournamentPairs: room.kind === 'tournament' ? room.tournamentPairs : null, tournamentByes: room.kind === 'tournament' ? room.tournamentByes : null,
       tournamentWords: room.kind === 'tournament' ? room.tournamentWords : null,
+      tournamentSeed: room.kind === 'tournament' ? room.tournamentSeed : null, tournamentRounds: room.kind === 'tournament' ? room.tournamentRounds : null,
       roundtableSeats: room.kind === 'roundtable' ? room.roundtableSeats : null,
       roundtableFreeWords: room.kind === 'roundtable' ? room.roundtableFreeWords : null,
     }
@@ -545,6 +549,8 @@
       room.tournamentPairs = (Array.isArray(payload.tournamentPairs) ? payload.tournamentPairs : []).flatMap((pair) => Array.isArray(pair) && pair.length === 2 ? [[String(pair[0]), String(pair[1])]] : [])
       room.tournamentByes = Array.from(new Set((Array.isArray(payload.tournamentByes) ? payload.tournamentByes : []).map(String)))
       room.tournamentWords = Object.fromEntries(Object.entries(payload.tournamentWords || {}).map(([pid, word]) => [String(pid), String(word)]))
+      room.tournamentSeed = Array.from(new Set((Array.isArray(payload.tournamentSeed) ? payload.tournamentSeed : room.tournamentSeed).map(String)))
+      room.tournamentRounds = normalizeTournamentRounds(payload.tournamentRounds ?? room.tournamentRounds)
       room.tournamentEliminated = []; room.tournamentChampion = null; room.tournamentMatches = new Map(); room.tournamentReady = new Set(); room.tournamentNextAt = null
       answer = room.tournamentWords[room.me.pid] || answer; room.answer = answer
     }
@@ -774,6 +780,85 @@
   }
   function tournamentPair(pid) { return room?.tournamentPairs.find((pair) => pair.includes(String(pid))) || null }
   function tournamentPairKey(pair) { return pair?.map(String).join('|') || '' }
+  function normalizeTournamentRounds(value) {
+    if (!Array.isArray(value)) return []
+    return value.flatMap((stage) => {
+      const round = Math.max(1, Number(stage?.round) || 0)
+      const pairs = (Array.isArray(stage?.pairs) ? stage.pairs : []).flatMap((pair) => Array.isArray(pair) && pair.length === 2 ? [[String(pair[0]), String(pair[1])]] : [])
+      const byes = Array.from(new Set((Array.isArray(stage?.byes) ? stage.byes : []).map(String)))
+      const matches = (Array.isArray(stage?.matches) ? stage.matches : []).flatMap((match) => {
+        const pair = Array.isArray(match?.pair) ? match.pair.map(String) : []
+        const winner = String(match?.winner || ''); const loser = String(match?.loser || '')
+        return pair.length === 2 && pair.includes(winner) && pair.includes(loser) && winner !== loser ? [{ pair, winner, loser, word: String(match.word || '') }] : []
+      })
+      return round && (pairs.length || byes.length) ? [{ round, pairs, byes, matches }] : []
+    }).sort((a, b) => a.round - b.round)
+  }
+  function recordTournamentRound() {
+    const stage = { round: room.round, pairs: room.tournamentPairs.map((pair) => pair.slice()), byes: room.tournamentByes.slice(), matches: Array.from(room.tournamentMatches.values(), (match) => ({ ...match, pair: match.pair.slice() })) }
+    room.tournamentRounds = normalizeTournamentRounds([...room.tournamentRounds.filter((item) => item.round !== room.round), stage])
+  }
+  function renderTournamentTree() {
+    const stages = normalizeTournamentRounds(room.tournamentRounds)
+    const first = stages[0]
+    const seed = Array.from(new Set((room.tournamentSeed.length ? room.tournamentSeed : first ? [...first.pairs.flat(), ...first.byes] : room.tournamentAlive).map(String)))
+    if (!seed.length) return '<p class="muted">대진을 만드는 중이에요.</p>'
+    const leafOrder = first ? [...first.pairs.flat(), ...first.byes, ...seed.filter((pid) => !first.pairs.flat().includes(pid) && !first.byes.includes(pid))] : seed
+    const totalRounds = Math.max(stages.at(-1)?.round || 0, Math.ceil(Math.log2(Math.max(2, seed.length))))
+    const gapX = 88; const gapY = 92; const width = Math.max(320, leafOrder.length * gapX); const height = 74 + totalRounds * gapY
+    const yFor = (level) => height - 34 - level * gapY
+    const stageMap = new Map(stages.map((stage) => [stage.round, stage]))
+    const levels = []; const edges = []
+    let current = leafOrder.map((pid, index) => ({ pid, x: gapX / 2 + index * gapX, y: yFor(0), level: 0 }))
+    levels.push(current)
+    for (let level = 0; level < totalRounds; level++) {
+      const stage = stageMap.get(level + 1); const next = []
+      if (stage) {
+        for (const pair of stage.pairs) {
+          const children = pair.map((pid) => current.find((node) => node.pid === pid)).filter(Boolean)
+          if (!children.length) continue
+          const match = stage.matches.find((item) => tournamentPairKey(item.pair) === tournamentPairKey(pair))
+          const parent = { pid: match?.winner || null, x: children.reduce((sum, node) => sum + node.x, 0) / children.length, y: yFor(level + 1), level: level + 1 }
+          next.push(parent); for (const child of children) edges.push({ child, parent })
+        }
+        for (const pid of stage.byes) {
+          const child = current.find((node) => node.pid === pid)
+          if (!child) continue
+          const parent = { pid, x: child.x, y: yFor(level + 1), level: level + 1, bye: true }
+          next.push(parent); edges.push({ child, parent })
+        }
+      } else {
+        const ordered = current.slice().sort((a, b) => a.x - b.x)
+        const waiting = ordered.slice(); const bye = waiting.length % 2 ? waiting.splice(level % waiting.length, 1)[0] : null
+        for (let index = 0; index < waiting.length; index += 2) {
+          const children = waiting.slice(index, index + 2)
+          const parent = { pid: null, x: children.reduce((sum, node) => sum + node.x, 0) / children.length, y: yFor(level + 1), level: level + 1, future: true }
+          next.push(parent); for (const child of children) edges.push({ child, parent, future: true })
+        }
+        if (bye) { const parent = { pid: bye.pid, x: bye.x, y: yFor(level + 1), level: level + 1, future: true, bye: true }; next.push(parent); edges.push({ child: bye, parent, future: true }) }
+      }
+      current = next.sort((a, b) => a.x - b.x); levels.push(current)
+    }
+    const nodeState = (node) => {
+      if (!node.pid) return { tone: 'pending', note: node.level === totalRounds ? '우승자' : `${node.level + 1}라운드` }
+      if (node.level === totalRounds && room.tournamentChampion === node.pid) return { tone: 'champion', note: '우승' }
+      const stage = stageMap.get(node.level + 1)
+      if (!stage) return { tone: 'pending', note: node.bye ? '부전승' : '대기' }
+      if (stage.byes.includes(node.pid)) return { tone: 'advance', note: '↑ 부전승' }
+      const match = stage.matches.find((item) => item.pair.includes(node.pid))
+      if (!match) return { tone: 'pending', note: '경기 중' }
+      return match.winner === node.pid ? { tone: 'advance', note: '↑ 진출' } : { tone: 'eliminated', note: '탈락' }
+    }
+    const paths = edges.map(({ child, parent, future }) => {
+      const middle = (child.y + parent.y) / 2; const tone = future ? 'future' : nodeState(child).tone
+      return `<path class="${tone}" d="M ${child.x} ${child.y - 20} V ${middle} H ${parent.x} V ${parent.y + 20}"/>`
+    }).join('')
+    const nodes = levels.flat().map((node) => {
+      const state = nodeState(node); const label = node.pid ? playerName(node.pid) : node.level === totalRounds ? '우승자' : `${node.level + 1}R 대기`
+      return `<div class="tournament-tree-node ${state.tone}" style="--tree-x:${node.x}px;--tree-y:${node.y}px"><b>${state.tone === 'champion' ? crownedName(label) : esc(label)}</b><small>${state.note}</small></div>`
+    }).join('')
+    return `<div class="tournament-tree-scroll"><div class="tournament-tree" style="width:${width}px;height:${height}px"><svg viewBox="0 0 ${width} ${height}" aria-hidden="true">${paths}</svg>${nodes}</div></div><div class="tournament-tree-legend"><span>아래에서 시작</span><b>승자가 위로 진출 ↑</b></div>`
+  }
   function tournamentMatchFor(pid) {
     const pair = tournamentPair(pid)
     return pair ? room.tournamentMatches.get(tournamentPairKey(pair)) || null : null
@@ -1494,13 +1579,14 @@
       Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final, payload)); return
     }
     if (room.kind === 'tournament') {
+      recordTournamentRound()
       const advances = Array.from(room.tournamentMatches.values(), (match) => match.winner)
       const eliminated = Array.from(room.tournamentMatches.values(), (match) => match.loser)
       advances.push(...room.tournamentByes)
       room.tournamentAlive = Array.from(new Set(advances)); room.tournamentEliminated = eliminated
       room.tournamentChampion = room.tournamentAlive.length === 1 ? room.tournamentAlive[0] : null
       room.tournamentNextAt = room.tournamentChampion ? null : Date.now() + 10000
-      const payload = { round: room.round, scores, totals: {}, final: Boolean(room.tournamentChampion), tournament: true, pairs: room.tournamentPairs, byes: room.tournamentByes, words: room.tournamentWords, matches: Array.from(room.tournamentMatches.values()), ready: Array.from(room.tournamentReady), nextAt: room.tournamentNextAt, eliminated, alive: room.tournamentAlive, champion: room.tournamentChampion }
+      const payload = { round: room.round, scores, totals: {}, final: Boolean(room.tournamentChampion), tournament: true, pairs: room.tournamentPairs, byes: room.tournamentByes, words: room.tournamentWords, matches: Array.from(room.tournamentMatches.values()), ready: Array.from(room.tournamentReady), nextAt: room.tournamentNextAt, eliminated, alive: room.tournamentAlive, champion: room.tournamentChampion, tournamentSeed: room.tournamentSeed, tournamentRounds: room.tournamentRounds }
       Net.send('over', payload); TW.applyRemote(() => showScoreboard(scores, payload.final, payload)); return
     }
     if (room.kind === 'relay') {
@@ -1560,6 +1646,8 @@
       room.tournamentNextAt = Number(meta.nextAt || meta.tournamentNextAt) || null
       const champion = meta.champion || meta.tournamentChampion
       room.tournamentChampion = champion ? String(champion) : null
+      room.tournamentSeed = Array.from(new Set((Array.isArray(meta.tournamentSeed) ? meta.tournamentSeed : room.tournamentSeed).map(String)))
+      room.tournamentRounds = normalizeTournamentRounds(meta.tournamentRounds ?? room.tournamentRounds)
     }
     room.waitEndsAt = null; $('#quickChat').hidden = true
     TW.endRoomGame(); renderBanner(); persistRoom(); TW.openSheet('scoreboard')
@@ -1671,21 +1759,13 @@
     }
     if (room.kind === 'tournament') {
       const champion = room.tournamentChampion
-      const cards = Array.from(room.tournamentMatches.values()).map((match, index) => {
-        const winnerResult = room.scoreResults.find((result) => result.pid === match.winner)
-        const detail = winnerResult?.status === 'won' ? `${(winnerResult.ms / 1000).toFixed(1)}초 만에 정답` : '상대보다 앞서 진출'
-        return `<article class="bracket-match" style="--match-delay:${index * 0.09}s"><div class="bracket-label">${room.round}라운드 · ${index + 1}경기 <span>정답 ${esc(match.word || '')}</span></div>
-          <div class="bracket-player advance"><b>${crownedName(playerName(match.winner))}</b><span>↑ 진출 · ${detail}</span></div>
-          <div class="bracket-player eliminated"><b>${esc(playerName(match.loser))}</b><span>패배 · 관전</span></div></article>`
-      }).join('')
-      const byes = room.tournamentByes.map((pid, index) => `<article class="bracket-match bye" style="--match-delay:${(room.tournamentMatches.size + index) * 0.09}s"><div class="bracket-label">${room.round}라운드 · 부전승</div><div class="bracket-player advance"><b>${crownedName(playerName(pid))}</b><span>↑ 자동 진출</span></div></article>`).join('')
       const title = champion ? `${crownedName(playerName(champion))}님 토너먼트 우승!` : `${room.round}라운드 종료 · ${room.tournamentAlive.length}명 진출`
       const ready = room.tournamentAlive.filter((pid) => room.tournamentReady.has(pid)).length
       const total = room.tournamentAlive.length
       const amAlive = room.tournamentAlive.includes(room.me.pid)
       const amReady = room.tournamentReady.has(room.me.pid)
       const controls = champion ? rematchControls() : `${amAlive ? `<button class="btn primary" data-act="room-tournament-ready" ${amReady ? 'disabled' : ''}>${amReady ? '준비 완료' : '다음 라운드 준비 완료'} · ${ready}/${total}</button>` : `<p class="muted">진출자 준비 ${ready}/${total} · 남은 경기를 관전합니다.</p>`}<p class="tournament-countdown">전원 준비 시 바로 시작 · 늦어도 10초 후 자동 시작</p>`
-      return `${celebration(Boolean(champion))}<h2>${title}</h2><p class="muted">승자는 위로 진출하고 패자는 회색으로 표시됩니다.</p><div class="tournament-bracket">${cards}${byes}</div>
+      return `${celebration(Boolean(champion))}<h2>${title}</h2><p class="muted">참가자는 아래에서 시작하고, 승자는 연결선을 따라 위 라운드로 올라갑니다.</p>${renderTournamentTree()}
         <div class="sheet-actions">${controls}<button class="btn ghost" data-go="leave">나가기</button></div>`
     }
     const names = displayNames(); const relay = room.kind === 'relay'
@@ -1802,7 +1882,7 @@
     room.results = new Map(); room.scoreResults = []; room.coopResult = null; room.finalChance = null; room.readyPids = new Set(); room.readyVoters = new Set()
     room.teamBoards = { red: [], blue: [] }; room.teamTurns = { red: null, blue: null }; room.teamStatus = { red: 'waiting', blue: 'waiting' }; room.teamFinishMs = { red: null, blue: null }; room.teamFinals = { red: null, blue: null }; room.teamDeadline = null; room.teamResult = null; room.teamWinner = null; room.teamPending = false; room.spies = { red: null, blue: null }; room.isSpy = false
     room.teamAnswers = null; room.teamPicks = null; room.captainAlive = []; room.captainEliminated = []; room.captainChampion = null
-    room.tournamentAlive = []; room.tournamentPairs = []; room.tournamentByes = []; room.tournamentEliminated = []; room.tournamentChampion = null
+    room.tournamentAlive = []; room.tournamentPairs = []; room.tournamentByes = []; room.tournamentEliminated = []; room.tournamentChampion = null; room.tournamentSeed = []; room.tournamentRounds = []
     room.tournamentWords = {}; room.tournamentMatches = new Map(); room.tournamentReady = new Set(); room.tournamentNextAt = null
     room.roundtableSeats = []; room.roundtableRows = []; room.roundtableLocked = new Set(); room.roundtableWinner = null; room.roundtablePending = false
     room.participants = []; room.activePids = new Set(); room.turnPid = null; room.pick = null; room.me.role = 'player'
@@ -1944,6 +2024,7 @@
       captain: room.kind === 'captain', captainAlive: room.captainAlive, captainEliminated: room.captainEliminated, captainChampion: room.captainChampion, eliminateCount: room.eliminateCount,
       tournament: room.kind === 'tournament', tournamentAlive: room.tournamentAlive, tournamentPairs: room.tournamentPairs, tournamentByes: room.tournamentByes, tournamentEliminated: room.tournamentEliminated, tournamentChampion: room.tournamentChampion,
       tournamentWords: room.tournamentWords, tournamentMatches: Array.from(room.tournamentMatches.values()), tournamentReady: Array.from(room.tournamentReady), tournamentNextAt: room.tournamentNextAt,
+      tournamentSeed: room.tournamentSeed, tournamentRounds: room.tournamentRounds,
       roundtable: room.kind === 'roundtable', roundtableSeats: room.roundtableSeats, roundtableFreeWords: room.roundtableFreeWords, roundtableState: wireRoundtableState(), winnerPid: room.roundtableWinner, rows: room.kind === 'roundtable' ? wireRoundtableState()?.rows : null,
       readyState: room.over ? room.kind === 'tournament' && !room.tournamentChampion
         ? { phase: 'tournament-ready-state', round: room.round, ready: Array.from(room.tournamentReady) }
@@ -1964,6 +2045,7 @@
           room.tournamentWords = Object.fromEntries(Object.entries(payload.tournamentWords || {}).map(([pid, word]) => [String(pid), String(word)]))
           room.tournamentMatches = new Map((payload.tournamentMatches || []).map((match) => [tournamentPairKey(match.pair), { ...match, pair: match.pair.map(String), winner: String(match.winner), loser: String(match.loser) }]))
           room.tournamentReady = new Set((payload.tournamentReady || []).map(String)); room.tournamentNextAt = Number(payload.tournamentNextAt) || null
+          room.tournamentSeed = Array.from(new Set((payload.tournamentSeed || room.tournamentSeed || []).map(String))); room.tournamentRounds = normalizeTournamentRounds(payload.tournamentRounds ?? room.tournamentRounds)
         }
         if (room.kind === 'roundtable') applyRoundtableSync(payload.roundtableState)
         room.turnPid = String(payload.turnPid || ''); room.coopPending = false

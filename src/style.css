@@ -376,18 +376,24 @@ body.roundtable-playing .key.submit { visibility: hidden; pointer-events: none; 
 .tournament-score li { grid-template-columns: 42px 1fr auto; }
 .tournament-score li > strong { font-size: 10px; }
 .tournament-score li b small { display: block; color: var(--ink-dim); font-size: 10px; font-weight: 400; }
-.tournament-bracket { display: grid; gap: 12px; margin: 14px 0 4px; }
-.bracket-match { overflow: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 14px; background: rgba(6,12,24,.45); animation: bracket-card-in .45s both; animation-delay: var(--match-delay, 0s); }
-.bracket-label { display: flex; justify-content: space-between; gap: 10px; padding: 7px 11px; color: var(--ink-dim); background: rgba(255,255,255,.035); font-size: 11px; }
-.bracket-player { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 9px 12px; }
-.bracket-player + .bracket-player { border-top: 1px solid rgba(255,255,255,.07); }
-.bracket-player b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bracket-player > span { flex: 0 0 auto; font-size: 11px; }
-.bracket-player.advance { color: #ffe07b; background: linear-gradient(90deg, rgba(255,200,44,.16), rgba(255,200,44,.025)); animation: bracket-advance .75s both; animation-delay: calc(var(--match-delay, 0s) + .16s); }
-.bracket-player.advance > span { color: #ffd75e; font-weight: 800; }
-.bracket-player.eliminated { color: #788293; filter: grayscale(1); animation: bracket-eliminate .7s both; animation-delay: calc(var(--match-delay, 0s) + .2s); }
-.bracket-player.eliminated > span { color: #687181; }
-.bracket-match.bye .bracket-player { border-top: 0; }
+.tournament-tree-scroll { overflow-x: auto; margin: 14px -8px 4px; padding: 8px 8px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(6,12,24,.34); scrollbar-width: thin; }
+.tournament-tree { position: relative; min-width: 100%; margin: 0 auto; }
+.tournament-tree svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.tournament-tree path { fill: none; stroke: rgba(156,221,153,.72); stroke-width: 2; vector-effect: non-scaling-stroke; animation: tree-line-in .65s both; }
+.tournament-tree path.eliminated { stroke: rgba(120,130,147,.42); }
+.tournament-tree path.future, .tournament-tree path.pending { stroke: rgba(255,255,255,.17); stroke-dasharray: 4 4; }
+.tournament-tree-node { position: absolute; left: var(--tree-x); top: var(--tree-y); z-index: 2; width: 78px; min-height: 40px; padding: 6px 4px; transform: translate(-50%,-50%); border: 1px solid var(--line); border-radius: 9px; background: #28282b; text-align: center; box-shadow: 0 3px 10px rgba(0,0,0,.28); }
+.tournament-tree-node b, .tournament-tree-node small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tournament-tree-node b { font-size: 11px; }
+.tournament-tree-node small { margin-top: 2px; color: var(--ink-dim); font-size: 9px; }
+.tournament-tree-node.advance { border-color: rgba(255,215,94,.62); background: linear-gradient(180deg, rgba(255,200,44,.18), #28282b); animation: tree-node-rise .7s both; }
+.tournament-tree-node.advance small { color: #ffd75e; font-weight: 800; }
+.tournament-tree-node.eliminated { border-color: rgba(120,130,147,.25); color: #788293; background: #202329; filter: grayscale(1); opacity: .58; }
+.tournament-tree-node.champion { border-color: #ffd75e; color: #fff4bf; background: linear-gradient(180deg, rgba(255,200,44,.3), #2c291f); box-shadow: 0 0 0 3px rgba(255,215,94,.1), 0 5px 16px rgba(0,0,0,.35); animation: crown-pop .65s cubic-bezier(.2,1.6,.4,1) both; }
+.tournament-tree-node.champion small { color: #ffd75e; font-weight: 800; }
+.tournament-tree-node.pending { border-style: dashed; color: var(--ink-dim); background: #232427; }
+.tournament-tree-legend { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-dim); font-size: 10px; }
+.tournament-tree-legend b { color: var(--correct); }
 .tournament-countdown { width: 100%; margin: 0; color: var(--ink-dim); text-align: center; font-size: 12px; }
 .winner-name { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; color: var(--ink); vertical-align: middle; }
 .score-list li .winner-name { color: var(--ink); font-size: inherit; }
@@ -401,9 +407,8 @@ body.roundtable-playing .key.submit { visibility: hidden; pointer-events: none; 
 .result-celebration i:nth-child(3n) { background: #63e6be; width: 11px; height: 7px; }
 @keyframes crown-pop { 0% { opacity: 0; transform: translateY(-12px) scale(.4) rotate(-18deg); } 70% { opacity: 1; transform: translateY(1px) scale(1.18) rotate(5deg); } 100% { opacity: 1; transform: none; } }
 @keyframes confetti-fall { 0% { opacity: 0; transform: translate3d(0,-12px,0) rotate(0); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate3d(var(--drift),205px,0) rotate(540deg); } }
-@keyframes bracket-card-in { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
-@keyframes bracket-advance { 0% { opacity: .25; transform: translateY(14px); } 65% { transform: translateY(-4px); } 100% { opacity: 1; transform: none; } }
-@keyframes bracket-eliminate { from { opacity: 1; filter: grayscale(0); } to { opacity: .42; filter: grayscale(1); } }
+@keyframes tree-line-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tree-node-rise { 0% { opacity: .2; transform: translate(-50%,calc(-50% + 18px)); } 70% { transform: translate(-50%,calc(-50% - 4px)); } 100% { opacity: 1; transform: translate(-50%,-50%); } }
 @media (prefers-reduced-motion: reduce) {
   .result-celebration { display: none; }
   .winner-name .winner-crown { animation: none; }
